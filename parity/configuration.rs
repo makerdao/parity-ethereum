@@ -138,6 +138,7 @@ impl Configuration {
 		let compaction = self.args.arg_db_compaction.parse()?;
 		let warp_sync = !self.args.flag_no_warp;
 		let geth_compatibility = self.args.flag_geth;
+		let experimental_rpcs = self.args.flag_jsonrpc_experimental;
 		let ipfs_conf = self.ipfs_config();
 		let secretstore_conf = self.secretstore_config()?;
 		let format = self.format()?;
@@ -377,6 +378,7 @@ impl Configuration {
 				warp_sync: warp_sync,
 				warp_barrier: self.args.arg_warp_barrier,
 				geth_compatibility: geth_compatibility,
+				experimental_rpcs,
 				net_settings: self.network_settings()?,
 				ipfs_conf: ipfs_conf,
 				secretstore_conf: secretstore_conf,
@@ -471,6 +473,10 @@ impl Configuration {
 		Ok(name.parse()?)
 	}
 
+	fn is_dev_chain(&self) -> Result<bool, String> {
+		Ok(self.chain()? == SpecType::Dev)
+	}
+
 	fn max_peers(&self) -> u32 {
 		self.args.arg_max_peers
 			.or(cmp::max(self.args.arg_min_peers, Some(DEFAULT_MAX_PEERS)))
@@ -528,7 +534,7 @@ impl Configuration {
 	}
 
 	fn miner_options(&self) -> Result<MinerOptions, String> {
-		let is_dev_chain = self.chain()? == SpecType::Dev;
+		let is_dev_chain = self.is_dev_chain()?;
 		if is_dev_chain && self.args.flag_force_sealing && self.args.arg_reseal_min_period == 0 {
 			return Err("Force sealing can't be used with reseal_min_period = 0".into());
 		}
@@ -922,6 +928,7 @@ impl Configuration {
 		Ok(NetworkSettings {
 			name: self.args.arg_identity.clone(),
 			chain: format!("{}", self.chain()?),
+			is_dev_chain: self.is_dev_chain()?,
 			network_port: net_addresses.0.port(),
 			rpc_enabled: http_conf.enabled,
 			rpc_interface: http_conf.interface,
@@ -1419,6 +1426,7 @@ mod tests {
 			compaction: Default::default(),
 			vm_type: Default::default(),
 			geth_compatibility: false,
+			experimental_rpcs: false,
 			net_settings: Default::default(),
 			ipfs_conf: Default::default(),
 			secretstore_conf: Default::default(),
@@ -1522,6 +1530,7 @@ mod tests {
 		assert_eq!(conf.network_settings(), Ok(NetworkSettings {
 			name: "testname".to_owned(),
 			chain: "kovan".to_owned(),
+			is_dev_chain: false,
 			network_port: 30303,
 			rpc_enabled: true,
 			rpc_interface: "127.0.0.1".to_owned(),
