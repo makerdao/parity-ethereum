@@ -327,23 +327,25 @@ impl Importer {
 		};
 
 		{
-			if !imported_blocks.is_empty() && is_empty {
+			if !imported_blocks.is_empty() {
 				let route = ChainRoute::from(import_results.as_ref());
 
 				if is_empty {
 					self.miner.chain_new_blocks(client, &imported_blocks, &invalid_blocks, route.enacted(), route.retracted(), false);
 				}
 
-				client.notify(|notify| {
-					notify.new_blocks(
-						imported_blocks.clone(),
-						invalid_blocks.clone(),
-						route.clone(),
-						Vec::new(),
-						proposed_blocks.clone(),
-						duration,
-					);
-				});
+				if client.queue_info().total_queue_size() < 10 {
+					client.notify(|notify| {
+						notify.new_blocks(
+							imported_blocks.clone(),
+							invalid_blocks.clone(),
+							route.clone(),
+							Vec::new(),
+							proposed_blocks.clone(),
+							duration,
+						);
+					});
+				}
 			}
 		}
 
