@@ -152,6 +152,7 @@ pub fn generate_dummy_client_with_spec_accounts_and_data<F>(test_spec: F, accoun
 			test_engine,
 			Default::default(),
 			false,
+			false,
 			db,
 			&last_header,
 			Arc::new(last_hashes.clone()),

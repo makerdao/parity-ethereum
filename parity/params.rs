@@ -177,6 +177,30 @@ impl Pruning {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum StorageWriting {
+    On,
+    Off,
+}
+
+impl Default for StorageWriting {
+    fn default() -> Self {
+        StorageWriting::Off
+    }
+}
+
+impl str::FromStr for StorageWriting {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "on" => Ok(StorageWriting::On),
+            _other => Ok(StorageWriting::Off),
+        }
+    }
+}
+
+
+#[derive(Debug, PartialEq)]
 pub struct ResealPolicy {
 	pub own: bool,
 	pub external: bool,
@@ -345,6 +369,14 @@ pub fn fatdb_switch_to_bool(switch: Switch, user_defaults: &UserDefaults, _algor
 	result
 }
 
+pub fn storage_writing_to_bool(storage_writing: StorageWriting) -> Result<bool, String> {
+	let result = match storage_writing {
+		StorageWriting::On => Ok(true),
+		StorageWriting::Off => Ok(false),
+	};
+	result
+}
+
 pub fn mode_switch_to_bool(switch: Option<Mode>, user_defaults: &UserDefaults) -> Result<Mode, String> {
 	Ok(switch.unwrap_or(user_defaults.mode().clone()))
 }
@@ -353,7 +385,7 @@ pub fn mode_switch_to_bool(switch: Option<Mode>, user_defaults: &UserDefaults) -
 mod tests {
 	use journaldb::Algorithm;
 	use user_defaults::UserDefaults;
-	use super::{SpecType, Pruning, ResealPolicy, Switch, tracing_switch_to_bool};
+	use super::{SpecType, Pruning, StorageWriting, ResealPolicy, Switch, tracing_switch_to_bool};
 
 	#[test]
 	fn test_spec_type_parsing() {
@@ -423,6 +455,17 @@ mod tests {
 	#[test]
 	fn test_pruning_default() {
 		assert_eq!(Pruning::Auto, Pruning::default());
+	}
+
+	#[test]
+	fn test_storage_writing_parsing() {
+		assert_eq!(StorageWriting::On, "on".parse().unwrap());
+		assert_eq!(StorageWriting::Off, "off".parse().unwrap());
+	}
+
+	#[test]
+	fn test_storage_writing_default() {
+		assert_eq!(StorageWriting::Off, StorageWriting::default());
 	}
 
 	#[test]

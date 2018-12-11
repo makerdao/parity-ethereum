@@ -409,6 +409,7 @@ impl PrepareOpenBlock for TestBlockChainClient {
 			engine,
 			Default::default(),
 			false,
+			false,
 			db,
 			&genesis_header,
 			Arc::new(last_hashes),

@@ -48,8 +48,8 @@ use updater::{UpdatePolicy, Updater};
 use parity_version::version;
 use ethcore_private_tx::{ProviderConfig, EncryptorConfig, SecretStoreEncryptor};
 use params::{
-	SpecType, Pruning, AccountsConfig, GasPricerConfig, MinerExtras, Switch,
-	tracing_switch_to_bool, fatdb_switch_to_bool, mode_switch_to_bool
+	SpecType, Pruning, StorageWriting, AccountsConfig, GasPricerConfig, MinerExtras, Switch,
+	tracing_switch_to_bool, fatdb_switch_to_bool, storage_writing_to_bool, mode_switch_to_bool
 };
 use helpers::{to_client_config, execute_upgrades, passwords_from_files};
 use upgrade::upgrade_key_location;
@@ -94,6 +94,7 @@ pub struct RunCmd {
 	pub pruning: Pruning,
 	pub pruning_history: u64,
 	pub pruning_memory: usize,
+	pub storage_writing: StorageWriting,
 	/// Some if execution should be daemonized. Contains pid_file path.
 	pub daemon: Option<String>,
 	pub logger_config: LogConfig,
@@ -411,6 +412,9 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// check if fatdb is on
 	let fat_db = fatdb_switch_to_bool(cmd.fat_db, &user_defaults, algorithm)?;
 
+	// check if storage writing is on
+	let storage_writing = storage_writing_to_bool(cmd.storage_writing)?;
+
 	// get the mode
 	let mode = mode_switch_to_bool(cmd.mode, &user_defaults)?;
 	trace!(target: "mode", "mode is {:?}", mode);
@@ -559,6 +563,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 		algorithm,
 		cmd.pruning_history,
 		cmd.pruning_memory,
+		storage_writing,
 		cmd.check_seal,
 		cmd.max_round_blocks_to_import,
 	);

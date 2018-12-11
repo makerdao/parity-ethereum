@@ -118,6 +118,7 @@ impl Configuration {
 		let dirs = self.directories();
 		let pruning = self.args.arg_pruning.parse()?;
 		let pruning_history = self.args.arg_pruning_history;
+		let storage_writing = self.args.arg_storage_writing.parse()?;
 		let vm_type = self.vm_type()?;
 		let spec = self.chain()?;
 		let mode = match self.args.arg_mode.as_ref() {
@@ -249,6 +250,7 @@ impl Configuration {
 				pruning: pruning,
 				pruning_history: pruning_history,
 				pruning_memory: self.args.arg_pruning_memory,
+				storage_writing: storage_writing,
 				compaction: compaction,
 				tracing: tracing,
 				fat_db: fat_db,
@@ -271,6 +273,7 @@ impl Configuration {
 					pruning: pruning,
 					pruning_history: pruning_history,
 					pruning_memory: self.args.arg_pruning_memory,
+					storage_writing: storage_writing,
 					compaction: compaction,
 					tracing: tracing,
 					fat_db: fat_db,
@@ -290,6 +293,7 @@ impl Configuration {
 					pruning: pruning,
 					pruning_history: pruning_history,
 					pruning_memory: self.args.arg_pruning_memory,
+					storage_writing: storage_writing,
 					compaction: compaction,
 					tracing: tracing,
 					fat_db: fat_db,
@@ -312,6 +316,7 @@ impl Configuration {
 				pruning: pruning,
 				pruning_history: pruning_history,
 				pruning_memory: self.args.arg_pruning_memory,
+				storage_writing: storage_writing,
 				tracing: tracing,
 				fat_db: fat_db,
 				compaction: compaction,
@@ -330,6 +335,7 @@ impl Configuration {
 				pruning: pruning,
 				pruning_history: pruning_history,
 				pruning_memory: self.args.arg_pruning_memory,
+				storage_writing: storage_writing,
 				tracing: tracing,
 				fat_db: fat_db,
 				compaction: compaction,
@@ -367,6 +373,7 @@ impl Configuration {
 				pruning: pruning,
 				pruning_history: pruning_history,
 				pruning_memory: self.args.arg_pruning_memory,
+				storage_writing: storage_writing,
 				daemon: daemon,
 				logger_config: logger_config.clone(),
 				miner_options: self.miner_options()?,
@@ -1286,6 +1293,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
+			storage_writing: Default::default(),
 			compaction: Default::default(),
 			tracing: Default::default(),
 			fat_db: Default::default(),
@@ -1310,6 +1318,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
+			storage_writing: Default::default(),
 			format: Default::default(),
 			compaction: Default::default(),
 			tracing: Default::default(),
@@ -1333,6 +1342,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
+			storage_writing: Default::default(),
 			format: Default::default(),
 			compaction: Default::default(),
 			tracing: Default::default(),
@@ -1358,6 +1368,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
+			storage_writing: Default::default(),
 			format: Some(DataFormat::Hex),
 			compaction: Default::default(),
 			tracing: Default::default(),
@@ -1414,6 +1425,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
+			storage_writing: Default::default(),
 			daemon: None,
 			logger_config: Default::default(),
 			miner_options: Default::default(),

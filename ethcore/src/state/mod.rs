@@ -42,7 +42,7 @@ use types::transaction::SignedTransaction;
 use state_db::StateDB;
 use factory::VmFactory;
 
-use ethereum_types::{H256, U256, Address, clean_0x};
+use ethereum_types::{H256, U256, Address};
 use hashdb::{HashDB, AsHashDB};
 use keccak_hasher::KeccakHasher;
 use kvdb::DBValue;
@@ -873,27 +873,14 @@ impl<B: Backend> State<B> {
 		Ok(())
 	}
 
-    fn to_address(s: &str) -> Result<Address, String> {
-        clean_0x(s).parse().map_err(|_| format!("Invalid address: {:?}", s))
-    }
-
     /// Write watched state/storage trie vals to secondary datastore
     pub fn write_watched_state(&mut self, header_hash: H256) -> Result<(), Error> {
-        let vat_address: Address = State::<B>::to_address("0xcd726790550afcd77e9a7a47e86a3f9010af126b")?;
-        let pit_address: Address = State::<B>::to_address("0xe7cf3198787c9a4daac73371a38f29aaeeced87e")?;
-        let cat_address: Address = State::<B>::to_address("0x2339c981aa3d576fb34a815ccff50ffb026bf4ea")?;
-        let mut watched = Vec::new();
-        watched.push(vat_address);
-        watched.push(pit_address);
-        watched.push(cat_address);
 		let mut accounts = self.cache.borrow_mut();
 		for (address, ref mut a) in accounts.iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
 			if let Some(ref mut account) = a.account {
-                if watched.contains(address) {
                     for (k, v) in account.storage_changes() {
-                        print!("{}", format!("contract: {}\n block: {}\n key: {}\n val: {}\n", address, header_hash, k, v));
+                        print!("{}", format!("contract: {:100}\n block: {:100}\n key: {:100}\n val: {:100}\n", address, header_hash, k, v));
                     }
-				}
 			}
 		}
         Ok(())

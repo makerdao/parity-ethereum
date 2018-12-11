@@ -97,6 +97,8 @@ pub struct ClientConfig {
 	pub fat_db: bool,
 	/// The JournalDB ("pruning") algorithm to use.
 	pub pruning: journaldb::Algorithm,
+	/// Writing storage changes to secondary datastore enabled?
+	pub storage_writing: bool,
 	/// The name of the client instance.
 	pub name: String,
 	/// RocksDB column cache-size if not default
@@ -137,6 +139,7 @@ impl Default for ClientConfig {
 			vm_type: Default::default(),
 			fat_db: false,
 			pruning: journaldb::Algorithm::OverlayRecent,
+			storage_writing: false,
 			name: "default".into(),
 			db_cache_size: None,
 			db_compaction: Default::default(),

@@ -35,7 +35,7 @@ use ethcore::verification::queue::kind::blocks::Unverified;
 use ethcore_service::ClientService;
 use cache::CacheConfig;
 use informant::{Informant, FullNodeInformantData, MillisecondDuration};
-use params::{SpecType, Pruning, Switch, tracing_switch_to_bool, fatdb_switch_to_bool};
+use params::{SpecType, Pruning, StorageWriting, Switch, tracing_switch_to_bool, fatdb_switch_to_bool, storage_writing_to_bool};
 use helpers::{to_client_config, execute_upgrades};
 use dir::Directories;
 use user_defaults::UserDefaults;
@@ -107,6 +107,7 @@ pub struct ImportBlockchain {
 	pub pruning: Pruning,
 	pub pruning_history: u64,
 	pub pruning_memory: usize,
+	pub storage_writing: StorageWriting,
 	pub compaction: DatabaseCompactionProfile,
 	pub tracing: Switch,
 	pub fat_db: Switch,
@@ -128,6 +129,7 @@ pub struct ExportBlockchain {
 	pub pruning: Pruning,
 	pub pruning_history: u64,
 	pub pruning_memory: usize,
+	pub storage_writing: StorageWriting,
 	pub compaction: DatabaseCompactionProfile,
 	pub fat_db: Switch,
 	pub tracing: Switch,
@@ -147,6 +149,7 @@ pub struct ExportState {
 	pub pruning: Pruning,
 	pub pruning_history: u64,
 	pub pruning_memory: usize,
+	pub storage_writing: StorageWriting,
 	pub compaction: DatabaseCompactionProfile,
 	pub fat_db: Switch,
 	pub tracing: Switch,
@@ -348,6 +351,9 @@ fn execute_import(cmd: ImportBlockchain) -> Result<(), String> {
 	// check if tracing is on
 	let tracing = tracing_switch_to_bool(cmd.tracing, &user_defaults)?;
 
+	// check if storage writing is on
+	let storage_writing = storage_writing_to_bool(cmd.storage_writing)?;
+
 	// check if fatdb is on
 	let fat_db = fatdb_switch_to_bool(cmd.fat_db, &user_defaults, algorithm)?;
 
@@ -374,6 +380,7 @@ fn execute_import(cmd: ImportBlockchain) -> Result<(), String> {
 		algorithm,
 		cmd.pruning_history,
 		cmd.pruning_memory,
+        storage_writing,
 		cmd.check_seal,
 		12,
 	);
@@ -510,6 +517,7 @@ fn start_client(
 	pruning: Pruning,
 	pruning_history: u64,
 	pruning_memory: usize,
+	storage_writing: StorageWriting,
 	tracing: Switch,
 	fat_db: Switch,
 	compaction: DatabaseCompactionProfile,
@@ -538,6 +546,9 @@ fn start_client(
 
 	// check if tracing is on
 	let tracing = tracing_switch_to_bool(tracing, &user_defaults)?;
+
+	// check if storage writing is on
+	let storage_writing = storage_writing_to_bool(storage_writing)?;
 
 	// check if fatdb is on
 	let fat_db = fatdb_switch_to_bool(fat_db, &user_defaults, algorithm)?;
@@ -568,6 +579,7 @@ fn start_client(
 		algorithm,
 		pruning_history,
 		pruning_memory,
+		storage_writing,
 		true,
 		max_round_blocks_to_import,
 	);
@@ -602,6 +614,7 @@ fn execute_export(cmd: ExportBlockchain) -> Result<(), String> {
 		cmd.pruning,
 		cmd.pruning_history,
 		cmd.pruning_memory,
+		cmd.storage_writing,
 		cmd.tracing,
 		cmd.fat_db,
 		cmd.compaction,
@@ -647,6 +660,7 @@ fn execute_export_state(cmd: ExportState) -> Result<(), String> {
 		cmd.pruning,
 		cmd.pruning_history,
 		cmd.pruning_memory,
+		cmd.storage_writing,
 		cmd.tracing,
 		cmd.fat_db,
 		cmd.compaction,
