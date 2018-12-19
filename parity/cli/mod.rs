@@ -869,8 +869,8 @@ usage! {
 			"The ideal amount of memory in megabytes to use to store recent states. As many states as possible will be kept within this limit, and at least --pruning-history states will always be kept.",
 
 			ARG arg_storage_writing: (String) = "off", or |c: &Config| c.footprint.as_ref()?.storage_writing.clone(),
-			"--storage-writing=[BOOL]",
-			"Configure writing of storage trie diffs to secondary datastore. BOOL may be one of on, off.",
+			"--storage-writing=[DATABASE]",
+			"Enable writing storage trie diffs to secondary database. DATABASE may be one of csv, postgres, or off.",
 
 			ARG arg_cache_size_db: (u32) = 128u32, or |c: &Config| c.footprint.as_ref()?.cache_size_db.clone(),
 			"--cache-size-db=[MB]",
@@ -2097,7 +2097,7 @@ mod tests {
 				pruning: Some("fast".into()),
 				pruning_history: Some(64),
 				pruning_memory: None,
-				storage_writing: Some("on".into()),
+				storage_writing: Some("csv".into()),
 				fast_and_loose: None,
 				cache_size: None,
 				cache_size_db: Some(256),

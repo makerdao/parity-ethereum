@@ -49,7 +49,7 @@ use parity_version::version;
 use ethcore_private_tx::{ProviderConfig, EncryptorConfig, SecretStoreEncryptor};
 use params::{
 	SpecType, Pruning, StorageWriting, AccountsConfig, GasPricerConfig, MinerExtras, Switch,
-	tracing_switch_to_bool, fatdb_switch_to_bool, storage_writing_to_bool, mode_switch_to_bool
+	tracing_switch_to_bool, fatdb_switch_to_bool, mode_switch_to_bool
 };
 use helpers::{to_client_config, execute_upgrades, passwords_from_files};
 use upgrade::upgrade_key_location;
@@ -413,7 +413,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	let fat_db = fatdb_switch_to_bool(cmd.fat_db, &user_defaults, algorithm)?;
 
 	// check if storage writing is on
-	let storage_writing = storage_writing_to_bool(cmd.storage_writing)?;
+	let storage_writing_database = cmd.storage_writing.to_database();
 
 	// get the mode
 	let mode = mode_switch_to_bool(cmd.mode, &user_defaults)?;
@@ -563,7 +563,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 		algorithm,
 		cmd.pruning_history,
 		cmd.pruning_memory,
-		storage_writing,
+		storage_writing_database,
 		cmd.check_seal,
 		cmd.max_round_blocks_to_import,
 	);

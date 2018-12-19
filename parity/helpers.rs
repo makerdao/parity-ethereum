@@ -31,6 +31,7 @@ use sync::{validate_node_url, self};
 use db::migrate;
 use path;
 use ethkey::Password;
+use storage_writer;
 
 pub fn to_duration(s: &str) -> Result<Duration, String> {
 	to_seconds(s).map(Duration::from_secs)
@@ -215,7 +216,7 @@ pub fn to_client_config(
 	pruning: Algorithm,
 	pruning_history: u64,
 	pruning_memory: usize,
-	storage_writing: bool,
+	storage_writing_database: storage_writer::Database,
 	check_seal: bool,
 	max_round_blocks_to_import: usize,
 ) -> ClientConfig {
@@ -246,7 +247,7 @@ pub fn to_client_config(
 	client_config.fat_db = fat_db;
 	client_config.pruning = pruning;
 	client_config.history = pruning_history;
-	client_config.storage_writing = storage_writing;
+	client_config.storage_writing_database = storage_writing_database;
 	client_config.db_compaction = compaction;
 	client_config.vm_type = vm_type;
 	client_config.name = name;

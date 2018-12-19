@@ -20,6 +20,7 @@ use std::fmt::{Display, Formatter, Error as FmtError};
 use verification::{VerifierType, QueueConfig};
 use journaldb;
 use snapshot::SnapshotConfiguration;
+use storage_writer;
 
 pub use std::time::Duration;
 pub use blockchain::Config as BlockChainConfig;
@@ -97,8 +98,10 @@ pub struct ClientConfig {
 	pub fat_db: bool,
 	/// The JournalDB ("pruning") algorithm to use.
 	pub pruning: journaldb::Algorithm,
-	/// Writing storage changes to secondary datastore enabled?
+	/// Storage Writing enabled?
 	pub storage_writing: bool,
+	/// Storage Writing database to use.
+	pub storage_writing_database: storage_writer::Database,
 	/// The name of the client instance.
 	pub name: String,
 	/// RocksDB column cache-size if not default
@@ -140,6 +143,7 @@ impl Default for ClientConfig {
 			fat_db: false,
 			pruning: journaldb::Algorithm::OverlayRecent,
 			storage_writing: false,
+			storage_writing_database: storage_writer::Database::None,
 			name: "default".into(),
 			db_cache_size: None,
 			db_compaction: Default::default(),

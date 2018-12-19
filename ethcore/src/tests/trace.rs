@@ -35,6 +35,7 @@ use verification::queue::kind::blocks::Unverified;
 use types::header::Header;
 use types::view;
 use types::views::BlockView;
+use storage_writer;
 
 #[test]
 fn can_trace_block_and_uncle_reward() {
@@ -79,7 +80,7 @@ fn can_trace_block_and_uncle_reward() {
 		engine,
 		Default::default(),
 		false,
-		false,
+		storage_writer::new(storage_writer::Database::None),
 		db,
 		&last_header,
 		Arc::new(last_hashes.clone()),
@@ -109,7 +110,7 @@ fn can_trace_block_and_uncle_reward() {
 		engine,
 		Default::default(),
 		false,
-		false,
+		storage_writer::new(storage_writer::Database::None),
 		db,
 		&last_header,
 		Arc::new(last_hashes.clone()),
@@ -138,7 +139,7 @@ fn can_trace_block_and_uncle_reward() {
 		engine,
 		Default::default(),
 		true,
-		false,
+		storage_writer::new(storage_writer::Database::None),
 		db,
 		&last_header,
 		Arc::new(last_hashes.clone()),

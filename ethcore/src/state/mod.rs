@@ -41,6 +41,7 @@ use types::state_diff::StateDiff;
 use types::transaction::SignedTransaction;
 use state_db::StateDB;
 use factory::VmFactory;
+use storage_writer;
 
 use ethereum_types::{H256, U256, Address};
 use hashdb::{HashDB, AsHashDB};
@@ -225,7 +226,7 @@ pub fn check_proof(
 }
 
 /// Prove a `virtual` transaction on the given state.
-/// Returns `None` when the transacion could not be proved,
+/// Returns `None` when the transaction could not be proved,
 /// and a proof otherwise.
 pub fn prove_transaction_virtual<H: AsHashDB<KeccakHasher, DBValue> + Send + Sync>(
 	db: H,
@@ -874,12 +875,12 @@ impl<B: Backend> State<B> {
 	}
 
     /// Write watched state/storage trie vals to secondary datastore
-    pub fn write_watched_state(&mut self, header_hash: H256) -> Result<(), Error> {
+    pub fn write_watched_state(&mut self, header_hash: H256, mut storage_writer: Box<storage_writer::StorageWriter>) -> Result<(), Error> {
 		let mut accounts = self.cache.borrow_mut();
 		for (address, ref mut a) in accounts.iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
 			if let Some(ref mut account) = a.account {
                     for (k, v) in account.storage_changes() {
-                        print!("{}", format!("contract: {:100}\n block: {:100}\n key: {:100}\n val: {:100}\n", address, header_hash, k, v));
+						storage_writer.write_storage_node(*address, header_hash, *k, *v)?;
                     }
 			}
 		}

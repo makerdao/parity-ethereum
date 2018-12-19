@@ -27,6 +27,7 @@ use journaldb::Algorithm;
 use miner::gas_pricer::GasPricer;
 use miner::gas_price_calibrator::{GasPriceCalibratorOptions, GasPriceCalibrator};
 use parity_version::version_data;
+use storage_writer::Database;
 use user_defaults::UserDefaults;
 
 #[derive(Debug, PartialEq)]
@@ -178,7 +179,7 @@ impl Pruning {
 
 #[derive(Debug, PartialEq)]
 pub enum StorageWriting {
-    On,
+    Specific(Database),
     Off,
 }
 
@@ -193,10 +194,20 @@ impl str::FromStr for StorageWriting {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "on" => Ok(StorageWriting::On),
+            "csv" => Ok(StorageWriting::Specific(Database::Csv)),
+			"postgres" => Ok(StorageWriting::Specific(Database::Postgres)),
             _other => Ok(StorageWriting::Off),
         }
     }
+}
+
+impl StorageWriting {
+	pub fn to_database(&self) -> Database {
+		match *self {
+			StorageWriting::Specific(db) => db,
+			StorageWriting::Off => Database::None,
+		}
+	}
 }
 
 
@@ -369,14 +380,6 @@ pub fn fatdb_switch_to_bool(switch: Switch, user_defaults: &UserDefaults, _algor
 	result
 }
 
-pub fn storage_writing_to_bool(storage_writing: StorageWriting) -> Result<bool, String> {
-	let result = match storage_writing {
-		StorageWriting::On => Ok(true),
-		StorageWriting::Off => Ok(false),
-	};
-	result
-}
-
 pub fn mode_switch_to_bool(switch: Option<Mode>, user_defaults: &UserDefaults) -> Result<Mode, String> {
 	Ok(switch.unwrap_or(user_defaults.mode().clone()))
 }
@@ -384,6 +387,7 @@ pub fn mode_switch_to_bool(switch: Option<Mode>, user_defaults: &UserDefaults) -
 #[cfg(test)]
 mod tests {
 	use journaldb::Algorithm;
+	use storage_writer::Database;
 	use user_defaults::UserDefaults;
 	use super::{SpecType, Pruning, StorageWriting, ResealPolicy, Switch, tracing_switch_to_bool};
 
@@ -459,7 +463,8 @@ mod tests {
 
 	#[test]
 	fn test_storage_writing_parsing() {
-		assert_eq!(StorageWriting::On, "on".parse().unwrap());
+		assert_eq!(StorageWriting::Specific(Database::Csv), "csv".parse().unwrap());
+		assert_eq!(StorageWriting::Specific(Database::Postgres), "postgres".parse().unwrap());
 		assert_eq!(StorageWriting::Off, "off".parse().unwrap());
 	}
 
