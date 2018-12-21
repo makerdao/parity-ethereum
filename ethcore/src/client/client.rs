@@ -2328,6 +2328,7 @@ impl PrepareOpenBlock for Client {
 			self.tracedb.read().tracing_enabled(),
 			self.storage_writer.clone(),
 			self.watched_contracts.to_vec(),
+			H256::default(),
 			self.state_db.read().boxed_clone_canon(&h),
 			&best_header,
 			self.build_last_hashes(&h),

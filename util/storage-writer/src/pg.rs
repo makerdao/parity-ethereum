@@ -37,7 +37,7 @@ impl StorageWriter for PostgresStorageWriter {
         true
     }
 
-    fn write_storage_node(&mut self, _contract: Address, _block: H256, _key: H256, _value: H256) -> io::Result<()> {
+    fn write_storage_node(&mut self, _contract: Address, _block_hash: H256, _block_number: u64, _key: H256, _value: H256) -> io::Result<()> {
         unimplemented!()
     }
 }

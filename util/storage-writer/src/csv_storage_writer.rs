@@ -60,9 +60,9 @@ impl StorageWriter for CsvStorageWriter {
         true
     }
 
-    fn write_storage_node(&mut self, contract: Address, block: H256, key: H256, value: H256) -> io::Result<()> {
+    fn write_storage_node(&mut self, contract: Address, block_hash: H256, block_number: u64, key: H256, value: H256) -> io::Result<()> {
         let mut wtr = self.writer.lock().unwrap();
-        wtr.write_record(&[format!("{:x}", contract), format!("{:x}", block), format!("{:x}", key), format!("{:x}", value)])?;
+        wtr.write_record(&[format!("{:x}", contract), format!("{:x}", block_hash), format!("{}", block_number), format!("{:x}", key), format!("{:x}", value)])?;
         wtr.flush()?;
         Ok(())
     }

@@ -39,7 +39,7 @@ pub trait StorageWriter: Send + Sync {
     fn enabled(&self) -> bool;
 
     /// Write storage node to disk
-    fn write_storage_node(&mut self, contract: Address, block: H256, key: H256, value: H256) -> io::Result<()>;
+    fn write_storage_node(&mut self, contract: Address, block_hash: H256, block_number: u64, key: H256, value: H256) -> io::Result<()>;
 }
 
 impl Clone for Box<StorageWriter> {

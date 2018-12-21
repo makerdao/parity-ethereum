@@ -112,13 +112,15 @@ pub struct ExecutedBlock {
 	pub storage_writer: Box<storage_writer::StorageWriter>,
 	/// Contracts for which to write storage changes.
 	pub watched_contracts: Vec<Address>,
+	/// Block hash.
+	pub header_hash: H256,
 	/// Hashes of last 256 blocks.
 	pub last_hashes: Arc<LastHashes>,
 }
 
 impl ExecutedBlock {
 	/// Create a new block from the given `state`.
-	fn new(state: State<StateDB>, last_hashes: Arc<LastHashes>, tracing: bool, storage_writer: Box<storage_writer::StorageWriter>, watched_contracts: Vec<Address>) -> ExecutedBlock {
+	fn new(state: State<StateDB>, last_hashes: Arc<LastHashes>, tracing: bool, storage_writer: Box<storage_writer::StorageWriter>, watched_contracts: Vec<Address>, header_hash: H256) -> ExecutedBlock {
 		ExecutedBlock {
 			header: Default::default(),
 			transactions: Default::default(),
@@ -133,6 +135,7 @@ impl ExecutedBlock {
 			},
 			storage_writer: storage_writer,
 			watched_contracts: watched_contracts,
+			header_hash: header_hash,
 			last_hashes: last_hashes,
 		}
 	}
@@ -230,6 +233,7 @@ impl<'x> OpenBlock<'x> {
 		tracing: bool,
 		storage_writer: Box<storage_writer::StorageWriter>,
 		watched_contracts: Vec<Address>,
+		header_hash: H256,
 		db: StateDB,
 		parent: &Header,
 		last_hashes: Arc<LastHashes>,
@@ -242,7 +246,7 @@ impl<'x> OpenBlock<'x> {
 		let number = parent.number() + 1;
 		let state = State::from_existing(db, parent.state_root().clone(), engine.account_start_nonce(number), factories)?;
 		let mut r = OpenBlock {
-			block: ExecutedBlock::new(state, last_hashes, tracing, storage_writer, watched_contracts),
+			block: ExecutedBlock::new(state, last_hashes, tracing, storage_writer, watched_contracts, header_hash),
 			engine: engine,
 		};
 
@@ -381,7 +385,7 @@ impl<'x> OpenBlock<'x> {
 
 		s.engine.on_close_block(&mut s.block)?;
 		if s.block.storage_writer.enabled() {
-			s.block.state.write_watched_state(s.block.header.hash(), s.block.watched_contracts.to_vec(), s.block.storage_writer.clone())?;
+			s.block.state.write_watched_state(s.block.header_hash, s.block.header.number() , s.block.watched_contracts.to_vec(), s.block.storage_writer.clone())?;
 		}
 		s.block.state.commit()?;
 
@@ -556,6 +560,8 @@ fn enact(
 		tracing,
 		storage_writing,
 		watched_contracts,
+		// header hash required for storage writing; not correct on the header derived via `populate_from` below
+		header.hash(),
 		db,
 		parent,
 		last_hashes,
@@ -633,6 +639,7 @@ mod tests {
 		tracing: bool,
 		storage_writer: Box<storage_writer::StorageWriter>,
 		watched_contracts: Vec<Address>,
+		header_hash: H256,
 		db: StateDB,
 		parent: &Header,
 		last_hashes: Arc<LastHashes>,
@@ -662,6 +669,7 @@ mod tests {
 			tracing,
 			storage_writer,
 			watched_contracts,
+			header_hash,
 			db,
 			parent,
 			last_hashes,
@@ -689,13 +697,14 @@ mod tests {
 		tracing: bool,
 		storage_writer: Box<storage_writer::StorageWriter>,
 		watched_contracts: Vec<Address>,
+		header_hash: H256,
 		db: StateDB,
 		parent: &Header,
 		last_hashes: Arc<LastHashes>,
 		factories: Factories,
 	) -> Result<SealedBlock, Error> {
 		let header = Unverified::from_rlp(block_bytes.clone())?.header;
-		Ok(enact_bytes(block_bytes, engine, tracing, storage_writer, watched_contracts, db, parent, last_hashes, factories)?
+		Ok(enact_bytes(block_bytes, engine, tracing, storage_writer, watched_contracts, header_hash, db, parent, last_hashes, factories)?
 		   .seal(engine, header.seal().to_vec())?)
 	}
 
@@ -706,7 +715,7 @@ mod tests {
 		let genesis_header = spec.genesis_header();
 		let db = spec.ensure_db_good(get_temp_state_db(), &Default::default()).unwrap();
 		let last_hashes = Arc::new(vec![genesis_header.hash()]);
-		let b = OpenBlock::new(&*spec.engine, Default::default(), false, storage_writer::new(storage_writer::Database::None), vec![], db, &genesis_header, last_hashes, Address::zero(), (3141562.into(), 31415620.into()), vec![], false, &mut Vec::new().into_iter()).unwrap();
+		let b = OpenBlock::new(&*spec.engine, Default::default(), false, storage_writer::new(storage_writer::Database::None), vec![], H256::default(), db, &genesis_header, last_hashes, Address::zero(), (3141562.into(), 31415620.into()), vec![], false, &mut Vec::new().into_iter()).unwrap();
 		let b = b.close_and_lock().unwrap();
 		let _ = b.seal(&*spec.engine, vec![]);
 	}
@@ -720,7 +729,7 @@ mod tests {
 
 		let db = spec.ensure_db_good(get_temp_state_db(), &Default::default()).unwrap();
 		let last_hashes = Arc::new(vec![genesis_header.hash()]);
-		let b = OpenBlock::new(engine, Default::default(), false, storage_writer::new(storage_writer::Database::None), vec![], db, &genesis_header, last_hashes.clone(), Address::zero(), (3141562.into(), 31415620.into()), vec![], false, &mut Vec::new().into_iter()).unwrap()
+		let b = OpenBlock::new(engine, Default::default(), false, storage_writer::new(storage_writer::Database::None), vec![], H256::default(), db, &genesis_header, last_hashes.clone(), Address::zero(), (3141562.into(), 31415620.into()), vec![], false, &mut Vec::new().into_iter()).unwrap()
 			.close_and_lock().unwrap().seal(engine, vec![]).unwrap();
 		let orig_bytes = b.rlp_bytes();
 		let orig_db = b.drain().state.drop().1;
