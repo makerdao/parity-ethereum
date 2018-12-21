@@ -106,6 +106,24 @@ impl fmt::Display for Database {
 }
 
 
+/// Configurtion for writing storage diffs from watched accounts
+#[derive(PartialEq, Debug, Clone)]
+pub struct StorageWriterConfig {
+    /// Accounts to be watched
+    pub watched_accounts: Vec<Address>,
+    /// Database used for persisting account storage diffs
+    pub database: Database,
+}
+
+impl Default for StorageWriterConfig {
+    fn default() -> Self {
+        StorageWriterConfig {
+            watched_accounts: Vec::new(),
+            database: Database::None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Database;

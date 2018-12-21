@@ -40,7 +40,7 @@ use parity_rpc::NetworkSettings;
 use cache::CacheConfig;
 use helpers::{to_duration, to_mode, to_block_id, to_u256, to_pending_set, to_price, geth_ipc_path, parity_ipc_path, to_bootnodes, to_addresses, to_address, to_queue_strategy, to_queue_penalization, passwords_from_files};
 use dir::helpers::{replace_home, replace_home_and_local};
-use params::{ResealPolicy, AccountsConfig, GasPricerConfig, MinerExtras, SpecType};
+use params::{ResealPolicy, AccountsConfig, GasPricerConfig, MinerExtras, SpecType, StorageWriting};
 use ethcore_logger::Config as LogConfig;
 use dir::{self, Directories, default_hypervisor_path, default_local_path, default_data_path};
 use ipfs::Configuration as IpfsConfiguration;
@@ -54,6 +54,7 @@ use presale::ImportWallet;
 use account::{AccountCmd, NewAccount, ListAccounts, ImportAccounts, ImportFromGethAccounts};
 use snapshot::{self, SnapshotCommand};
 use network::{IpFilter};
+use storage_writer::StorageWriterConfig;
 
 const DEFAULT_MAX_PEERS: u16 = 50;
 const DEFAULT_MIN_PEERS: u16 = 25;
@@ -118,7 +119,6 @@ impl Configuration {
 		let dirs = self.directories();
 		let pruning = self.args.arg_pruning.parse()?;
 		let pruning_history = self.args.arg_pruning_history;
-		let storage_writing = self.args.arg_storage_writing.parse()?;
 		let vm_type = self.vm_type()?;
 		let spec = self.chain()?;
 		let mode = match self.args.arg_mode.as_ref() {
@@ -143,6 +143,7 @@ impl Configuration {
 		let ipfs_conf = self.ipfs_config();
 		let secretstore_conf = self.secretstore_config()?;
 		let format = self.format()?;
+		let storage_writer_config = self.storage_writer_config()?;
 
 		let cmd = if self.args.flag_version {
 			Cmd::Version
@@ -250,7 +251,7 @@ impl Configuration {
 				pruning: pruning,
 				pruning_history: pruning_history,
 				pruning_memory: self.args.arg_pruning_memory,
-				storage_writing: storage_writing,
+				storage_writing_config: storage_writer_config,
 				compaction: compaction,
 				tracing: tracing,
 				fat_db: fat_db,
@@ -273,7 +274,7 @@ impl Configuration {
 					pruning: pruning,
 					pruning_history: pruning_history,
 					pruning_memory: self.args.arg_pruning_memory,
-					storage_writing: storage_writing,
+					storage_writing_config: storage_writer_config,
 					compaction: compaction,
 					tracing: tracing,
 					fat_db: fat_db,
@@ -293,7 +294,7 @@ impl Configuration {
 					pruning: pruning,
 					pruning_history: pruning_history,
 					pruning_memory: self.args.arg_pruning_memory,
-					storage_writing: storage_writing,
+					storage_writing_config: storage_writer_config,
 					compaction: compaction,
 					tracing: tracing,
 					fat_db: fat_db,
@@ -316,7 +317,7 @@ impl Configuration {
 				pruning: pruning,
 				pruning_history: pruning_history,
 				pruning_memory: self.args.arg_pruning_memory,
-				storage_writing: storage_writing,
+				storage_writer_config: storage_writer_config,
 				tracing: tracing,
 				fat_db: fat_db,
 				compaction: compaction,
@@ -335,7 +336,7 @@ impl Configuration {
 				pruning: pruning,
 				pruning_history: pruning_history,
 				pruning_memory: self.args.arg_pruning_memory,
-				storage_writing: storage_writing,
+				storage_writer_config: storage_writer_config,
 				tracing: tracing,
 				fat_db: fat_db,
 				compaction: compaction,
@@ -373,7 +374,7 @@ impl Configuration {
 				pruning: pruning,
 				pruning_history: pruning_history,
 				pruning_memory: self.args.arg_pruning_memory,
-				storage_writing: storage_writing,
+				storage_writer_config: storage_writer_config,
 				daemon: daemon,
 				logger_config: logger_config.clone(),
 				miner_options: self.miner_options()?,
@@ -934,6 +935,15 @@ impl Configuration {
 		Ok((provider_conf, encryptor_conf, self.args.flag_private_enabled))
 	}
 
+	fn storage_writer_config(&self) -> Result<StorageWriterConfig, String> {
+		let storage_writing: StorageWriting = self.args.arg_storage_writing.parse()?;
+		let storage_writer_conf = StorageWriterConfig{
+			watched_accounts: to_addresses(&self.args.arg_watched_contracts)?,
+			database: storage_writing.to_database(),
+		};
+		Ok(storage_writer_conf)
+	}
+
 	fn snapshot_config(&self) -> Result<SnapshotConfiguration, String> {
 		let conf = SnapshotConfiguration {
 			no_periodic: self.args.flag_no_periodic_snapshot,
@@ -1293,7 +1303,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
-			storage_writing: Default::default(),
+			storage_writing_config: Default::default(),
 			compaction: Default::default(),
 			tracing: Default::default(),
 			fat_db: Default::default(),
@@ -1318,7 +1328,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
-			storage_writing: Default::default(),
+			storage_writing_config: Default::default(),
 			format: Default::default(),
 			compaction: Default::default(),
 			tracing: Default::default(),
@@ -1342,7 +1352,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
-			storage_writing: Default::default(),
+			storage_writing_config: Default::default(),
 			format: Default::default(),
 			compaction: Default::default(),
 			tracing: Default::default(),
@@ -1368,7 +1378,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
-			storage_writing: Default::default(),
+			storage_writing_config: Default::default(),
 			format: Some(DataFormat::Hex),
 			compaction: Default::default(),
 			tracing: Default::default(),
@@ -1425,7 +1435,7 @@ mod tests {
 			pruning: Default::default(),
 			pruning_history: 64,
 			pruning_memory: 32,
-			storage_writing: Default::default(),
+			storage_writer_config: Default::default(),
 			daemon: None,
 			logger_config: Default::default(),
 			miner_options: Default::default(),

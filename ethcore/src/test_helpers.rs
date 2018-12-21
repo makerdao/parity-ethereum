@@ -154,6 +154,7 @@ pub fn generate_dummy_client_with_spec_accounts_and_data<F>(test_spec: F, accoun
 			Default::default(),
 			false,
 			storage_writer::new(storage_writer::Database::None),
+			vec![],
 			db,
 			&last_header,
 			Arc::new(last_hashes.clone()),

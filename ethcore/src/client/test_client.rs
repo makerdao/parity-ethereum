@@ -411,6 +411,7 @@ impl PrepareOpenBlock for TestBlockChainClient {
 			Default::default(),
 			false,
 			storage_writer::new(storage_writer::Database::None),
+			vec![],
 			db,
 			&genesis_header,
 			Arc::new(last_hashes),

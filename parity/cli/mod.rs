@@ -872,6 +872,10 @@ usage! {
 			"--storage-writing=[DATABASE]",
 			"Enable writing storage trie diffs to secondary database. DATABASE may be one of csv, postgres, or off.",
 
+			ARG arg_watched_contracts: (Option<String>) = None, or |c: &Config| c.account.as_ref()?.unlock.as_ref().map(|vec| vec.join(",")),
+			"--watch-contracts=[ACCOUNTS]",
+			"Specify contracts for which to watch storage trie diffs. ACCOUNTS is a comma-delimited list of addresses.",
+
 			ARG arg_cache_size_db: (u32) = 128u32, or |c: &Config| c.footprint.as_ref()?.cache_size_db.clone(),
 			"--cache-size-db=[MB]",
 			"Override database cache size.",
@@ -1824,6 +1828,7 @@ mod tests {
 			arg_pruning_history: 64u64,
 			arg_pruning_memory: 500usize,
 			arg_storage_writing: "off".into(),
+			arg_watched_contracts: Some("0xdeadbeefcafe0000000000000000000000000000".into()),
 			arg_cache_size_db: 64u32,
 			arg_cache_size_blocks: 8u32,
 			arg_cache_size_queue: 50u32,

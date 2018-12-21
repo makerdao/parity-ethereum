@@ -874,18 +874,20 @@ impl<B: Backend> State<B> {
 		Ok(())
 	}
 
-    /// Write watched state/storage trie vals to secondary datastore
-    pub fn write_watched_state(&mut self, header_hash: H256, mut storage_writer: Box<storage_writer::StorageWriter>) -> Result<(), Error> {
-		let mut accounts = self.cache.borrow_mut();
-		for (address, ref mut a) in accounts.iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
-			if let Some(ref mut account) = a.account {
+  	/// Write watched state/storage trie vals to secondary datastore
+  	pub fn write_watched_state(&mut self, header_hash: H256, watched_contracts: Vec<Address>, mut storage_writer: Box<storage_writer::StorageWriter>) -> Result<(), Error> {
+        let mut accounts = self.cache.borrow_mut();
+        for (address, ref mut a) in accounts.iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
+            if watched_contracts.contains(address) {
+                if let Some(ref mut account) = a.account {
                     for (k, v) in account.storage_changes() {
-						storage_writer.write_storage_node(*address, header_hash, *k, *v)?;
+                        storage_writer.write_storage_node(*address, header_hash, *k, *v)?;
                     }
-			}
-		}
+                }
+            }
+        }
         Ok(())
-    }
+  	}
 
 	/// Commits our cached account changes into the trie.
 	pub fn commit(&mut self) -> Result<(), Error> {

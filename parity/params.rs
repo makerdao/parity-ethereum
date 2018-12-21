@@ -195,19 +195,22 @@ impl str::FromStr for StorageWriting {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "csv" => Ok(StorageWriting::Specific(Database::Csv)),
-			"postgres" => Ok(StorageWriting::Specific(Database::Postgres)),
+            // TODO: either implement or remove postgres as an option
+            "postgres" => Ok(StorageWriting::Specific(Database::Postgres)),
+            // TODO: require "none"/"off" for explicit non-use, error on non-supported param
             _other => Ok(StorageWriting::Off),
         }
     }
 }
 
 impl StorageWriting {
-	pub fn to_database(&self) -> Database {
-		match *self {
-			StorageWriting::Specific(db) => db,
-			StorageWriting::Off => Database::None,
-		}
-	}
+    pub fn to_database(&self) -> Database {
+        match *self {
+            StorageWriting::Specific(db) => db,
+            // TODO: Maybe return an Option instead of having None/Noop implementations
+            StorageWriting::Off => Database::None,
+        }
+    }
 }
 
 

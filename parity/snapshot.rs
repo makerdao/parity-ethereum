@@ -31,12 +31,13 @@ use ethcore_service::ClientService;
 use types::ids::BlockId;
 
 use cache::CacheConfig;
-use params::{SpecType, Pruning, StorageWriting, Switch, tracing_switch_to_bool, fatdb_switch_to_bool};
+use params::{SpecType, Pruning, Switch, tracing_switch_to_bool, fatdb_switch_to_bool};
 use helpers::{to_client_config, execute_upgrades};
 use dir::Directories;
 use user_defaults::UserDefaults;
 use ethcore_private_tx;
 use db;
+use storage_writer::StorageWriterConfig;
 
 /// Kinds of snapshot commands.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -56,7 +57,7 @@ pub struct SnapshotCommand {
 	pub pruning: Pruning,
 	pub pruning_history: u64,
 	pub pruning_memory: usize,
-	pub storage_writing: StorageWriting,
+	pub storage_writer_config: StorageWriterConfig,
 	pub tracing: Switch,
 	pub fat_db: Switch,
 	pub compaction: DatabaseCompactionProfile,
@@ -160,9 +161,6 @@ impl SnapshotCommand {
 		// check if fatdb is on
 		let fat_db = fatdb_switch_to_bool(self.fat_db, &user_defaults, algorithm)?;
 
-		// check if storage writing is on
-		let storage_writing_database = self.storage_writing.to_database();
-
 		// prepare client and snapshot paths.
 		let client_path = db_dirs.client_path(algorithm);
 		let snapshot_path = db_dirs.snapshot_path();
@@ -183,7 +181,7 @@ impl SnapshotCommand {
 			algorithm,
 			self.pruning_history,
 			self.pruning_memory,
-			storage_writing_database,
+			self.storage_writer_config,
 			true,
 			self.max_round_blocks_to_import,
 		);
