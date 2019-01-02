@@ -211,7 +211,7 @@ impl Engine<EthereumMachine> for BasicAuthority {
 mod tests {
 	use std::sync::Arc;
 	use hash::keccak;
-	use ethereum_types::H520;
+	use ethereum_types::{H256, H520};
 	use block::*;
 	use test_helpers::get_temp_state_db;
 	use account_provider::AccountProvider;

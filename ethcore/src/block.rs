@@ -735,7 +735,7 @@ mod tests {
 		let orig_db = b.drain().state.drop().1;
 
 		let db = spec.ensure_db_good(get_temp_state_db(), &Default::default()).unwrap();
-		let e = enact_and_seal(orig_bytes.clone(), engine, false, storage_writer::new(storage_writer::Database::None), vec![], db, &genesis_header, last_hashes, Default::default()).unwrap();
+		let e = enact_and_seal(orig_bytes.clone(), engine, false, storage_writer::new(storage_writer::Database::None), vec![], H256::default(), db, &genesis_header, last_hashes, Default::default()).unwrap();
 
 		assert_eq!(e.rlp_bytes(), orig_bytes);
 
@@ -753,7 +753,7 @@ mod tests {
 
 		let db = spec.ensure_db_good(get_temp_state_db(), &Default::default()).unwrap();
 		let last_hashes = Arc::new(vec![genesis_header.hash()]);
-		let mut open_block = OpenBlock::new(engine, Default::default(), false, storage_writer::new(storage_writer::Database::None), vec![], db, &genesis_header, last_hashes.clone(), Address::zero(), (3141562.into(), 31415620.into()), vec![], false, &mut Vec::new().into_iter()).unwrap();
+		let mut open_block = OpenBlock::new(engine, Default::default(), false, storage_writer::new(storage_writer::Database::None), vec![], H256::default(), db, &genesis_header, last_hashes.clone(), Address::zero(), (3141562.into(), 31415620.into()), vec![], false, &mut Vec::new().into_iter()).unwrap();
 		let mut uncle1_header = Header::new();
 		uncle1_header.set_extra_data(b"uncle1".to_vec());
 		let mut uncle2_header = Header::new();
@@ -766,7 +766,7 @@ mod tests {
 		let orig_db = b.drain().state.drop().1;
 
 		let db = spec.ensure_db_good(get_temp_state_db(), &Default::default()).unwrap();
-		let e = enact_and_seal(orig_bytes.clone(), engine, false, storage_writer::new(storage_writer::Database::None), vec![], db, &genesis_header, last_hashes, Default::default()).unwrap();
+		let e = enact_and_seal(orig_bytes.clone(), engine, false, storage_writer::new(storage_writer::Database::None), vec![], H256::default(), db, &genesis_header, last_hashes, Default::default()).unwrap();
 
 		let bytes = e.rlp_bytes();
 		assert_eq!(bytes, orig_bytes);

@@ -19,7 +19,7 @@
 use ethkey::KeyPair;
 use hash::keccak;
 use block::*;
-use ethereum_types::{U256, Address};
+use ethereum_types::{H256, U256, Address};
 use io::*;
 use spec::*;
 use client::*;
