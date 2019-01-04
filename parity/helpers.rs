@@ -216,7 +216,7 @@ pub fn to_client_config(
 	pruning: Algorithm,
 	pruning_history: u64,
 	pruning_memory: usize,
-	storage_writing_config: StorageWriterConfig,
+	storage_writer_config: StorageWriterConfig,
 	check_seal: bool,
 	max_round_blocks_to_import: usize,
 ) -> ClientConfig {
@@ -247,7 +247,7 @@ pub fn to_client_config(
 	client_config.fat_db = fat_db;
 	client_config.pruning = pruning;
 	client_config.history = pruning_history;
-	client_config.storage_writing_config = storage_writing_config;
+	client_config.storage_writer_config = storage_writer_config;
 	client_config.db_compaction = compaction;
 	client_config.vm_type = vm_type;
 	client_config.name = name;

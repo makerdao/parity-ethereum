@@ -195,8 +195,6 @@ impl str::FromStr for StorageWriting {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "csv" => Ok(StorageWriting::Specific(Database::Csv)),
-            // TODO: either implement or remove postgres as an option
-            "postgres" => Ok(StorageWriting::Specific(Database::Postgres)),
             // TODO: require "none"/"off" for explicit non-use, error on non-supported param
             _other => Ok(StorageWriting::Off),
         }
@@ -467,7 +465,6 @@ mod tests {
 	#[test]
 	fn test_storage_writing_parsing() {
 		assert_eq!(StorageWriting::Specific(Database::Csv), "csv".parse().unwrap());
-		assert_eq!(StorageWriting::Specific(Database::Postgres), "postgres".parse().unwrap());
 		assert_eq!(StorageWriting::Off, "off".parse().unwrap());
 	}
 

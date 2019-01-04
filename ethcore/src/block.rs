@@ -537,7 +537,7 @@ fn enact(
 	uncles: Vec<Header>,
 	engine: &EthEngine,
 	tracing: bool,
-	storage_writing: Box<storage_writer::StorageWriter>,
+	storage_writer: Box<storage_writer::StorageWriter>,
 	watched_contracts: Vec<Address>,
 	db: StateDB,
 	parent: &Header,
@@ -558,7 +558,7 @@ fn enact(
 		engine,
 		factories,
 		tracing,
-		storage_writing,
+		storage_writer,
 		watched_contracts,
 		// header hash required for storage writing; not correct on the header derived via `populate_from` below
 		header.hash(),

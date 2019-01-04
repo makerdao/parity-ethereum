@@ -870,7 +870,7 @@ usage! {
 
 			ARG arg_storage_writing: (String) = "off", or |c: &Config| c.footprint.as_ref()?.storage_writing.clone(),
 			"--storage-writing=[DATABASE]",
-			"Enable writing storage trie diffs to secondary database. DATABASE may be one of csv, postgres, or off.",
+			"Enable writing storage trie diffs to secondary database. DATABASE may be one of csv or off.",
 
 			ARG arg_watched_contracts: (Option<String>) = None, or |c: &Config| c.account.as_ref()?.unlock.as_ref().map(|vec| vec.join(",")),
 			"--watch-contracts=[ACCOUNTS]",

@@ -72,9 +72,9 @@ use snapshot::{self, io as snapshot_io, SnapshotClient};
 use spec::Spec;
 use state::{self, State};
 use state_db::StateDB;
+use storage_writer;
 use trace::{self, TraceDB, ImportRequest as TraceImportRequest, LocalizedTrace, Database as TraceDatabase};
 use transaction_ext::Transaction;
-use storage_writer;
 use verification::queue::kind::BlockLike;
 use verification::queue::kind::blocks::Unverified;
 use verification::{PreverifiedBlock, Verifier, BlockQueue};
@@ -207,8 +207,8 @@ pub struct Client {
 
     /// Storage writer
     storage_writer: Box<storage_writer::StorageWriter>,
-	/// Contracts for which to write storage diffs
-	watched_contracts: Vec<Address>,
+    /// Contracts for which to write storage diffs
+    watched_contracts: Vec<Address>,
 
 	/// Flag changed by `sleep` and `wake_up` methods. Not to be confused with `enabled`.
 	liveness: AtomicBool,
@@ -751,7 +751,7 @@ impl Client {
 
 		trace!("Cleanup journal: DB Earliest = {:?}, Latest = {:?}", state_db.journal_db().earliest_era(), state_db.journal_db().latest_era());
 
-		let chosen_storage_writer = storage_writer::new(config.storage_writing_config.database);
+		let chosen_storage_writer = storage_writer::new(config.storage_writer_config.database);
 
 		let history = if config.history < MIN_HISTORY_SIZE {
 			info!(target: "client", "Ignoring pruning history parameter of {}\
@@ -781,7 +781,7 @@ impl Client {
 			enabled: AtomicBool::new(true),
 			sleep_state: Mutex::new(SleepState::new(awake)),
 			storage_writer: chosen_storage_writer,
-			watched_contracts: config.storage_writing_config.watched_accounts.to_vec(),
+			watched_contracts: config.storage_writer_config.watched_contracts.to_vec(),
 			liveness: AtomicBool::new(awake),
 			mode: Mutex::new(config.mode.clone()),
 			chain: RwLock::new(chain),

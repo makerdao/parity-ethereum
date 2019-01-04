@@ -414,7 +414,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	let fat_db = fatdb_switch_to_bool(cmd.fat_db, &user_defaults, algorithm)?;
 
 	// check if storage writing is on
-	let storage_writing_config = cmd.storage_writer_config;
+	let storage_writer_config = cmd.storage_writer_config;
 
 	// get the mode
 	let mode = mode_switch_to_bool(cmd.mode, &user_defaults)?;
@@ -564,7 +564,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 		algorithm,
 		cmd.pruning_history,
 		cmd.pruning_memory,
-		storage_writing_config,
+		storage_writer_config,
 		cmd.check_seal,
 		cmd.max_round_blocks_to_import,
 	);

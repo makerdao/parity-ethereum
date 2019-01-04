@@ -98,8 +98,8 @@ pub struct ClientConfig {
 	pub fat_db: bool,
 	/// The JournalDB ("pruning") algorithm to use.
 	pub pruning: journaldb::Algorithm,
-	/// Storage Writing config.
-	pub storage_writing_config: StorageWriterConfig,
+	/// Storage Writer config.
+	pub storage_writer_config: StorageWriterConfig,
 	/// The name of the client instance.
 	pub name: String,
 	/// RocksDB column cache-size if not default
@@ -120,7 +120,7 @@ pub struct ClientConfig {
 	pub history: u64,
 	/// Ideal memory usage for state pruning history.
 	pub history_mem: usize,
-	/// Check seal valididity on block import
+	/// Check seal validity on block import
 	pub check_seal: bool,
 	/// Maximal number of transactions queued for verification in a separate thread.
 	pub transaction_verification_queue_size: usize,
@@ -140,7 +140,7 @@ impl Default for ClientConfig {
 			vm_type: Default::default(),
 			fat_db: false,
 			pruning: journaldb::Algorithm::OverlayRecent,
-			storage_writing_config: Default::default(),
+			storage_writer_config: Default::default(),
 			name: "default".into(),
 			db_cache_size: None,
 			db_compaction: Default::default(),
