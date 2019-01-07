@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::collections::HashMap;
 use std::io;
 
 use super::StorageWriter;
@@ -37,7 +38,7 @@ impl StorageWriter for NoopStorageWriter {
         false
     }
 
-    fn write_storage_node(&mut self, _contract: Address, _block_hash: H256, _block_number: u64, _key: H256, _value: H256) -> io::Result<()> {
+    fn write_storage_diffs(&mut self, _header_hash: H256, _header_number: u64,  _dirty_accounts: HashMap<Address, HashMap<H256, H256>>) -> io::Result<()> {
         Ok(())
     }
 }

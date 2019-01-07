@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
+use std::collections::HashMap;
 use std::io;
 use std::fs;
 use std::fs::File;
@@ -27,11 +28,12 @@ use ethereum_types::{Address, H256};
 
 #[derive(Clone)]
 pub struct CsvStorageWriter {
+    watched_contracts: Vec<Address>,
     writer: Arc<Mutex<Writer<File>>>
 }
 
 impl CsvStorageWriter {
-    pub fn new() -> CsvStorageWriter {
+    pub fn new(watched_contracts: Vec<Address>) -> CsvStorageWriter {
         let path = replace_home(&default_data_path(), "$BASE/watched_storage");
 
         // TODO: handle error differently on file creation
@@ -46,24 +48,36 @@ impl CsvStorageWriter {
         let wtr = csv::Writer::from_writer(file);
 
         CsvStorageWriter {
+            watched_contracts: watched_contracts,
             writer: Arc::new(Mutex::new(wtr))
         }
-    }
-}
-
-impl StorageWriter for CsvStorageWriter {
-    fn boxed_clone(&self) -> Box<StorageWriter> {
-        Box::new(CsvStorageWriter::new())
-    }
-
-    fn enabled(&self) -> bool {
-        true
     }
 
     fn write_storage_node(&mut self, contract: Address, block_hash: H256, block_number: u64, key: H256, value: H256) -> io::Result<()> {
         let mut wtr = self.writer.lock().unwrap();
         wtr.write_record(&[format!("{:x}", contract), format!("{:x}", block_hash), format!("{}", block_number), format!("{:x}", key), format!("{:x}", value)])?;
         wtr.flush()?;
+        Ok(())
+    }
+}
+
+impl StorageWriter for CsvStorageWriter {
+    fn boxed_clone(&self) -> Box<StorageWriter> {
+        Box::new(CsvStorageWriter::new(self.watched_contracts.to_vec()))
+    }
+
+    fn enabled(&self) -> bool {
+        true
+    }
+
+    fn write_storage_diffs(&mut self, header_hash: H256, header_number: u64, accounts_storage_diffs: HashMap<Address, HashMap<H256, H256>>) -> io::Result<()> {
+        for (addr, diffs) in accounts_storage_diffs {
+            if self.watched_contracts.contains(&addr) {
+                for (k, v) in diffs {
+                    self.write_storage_node(addr, header_hash, header_number, k, v)?;
+                }
+            }
+        }
         Ok(())
     }
 }

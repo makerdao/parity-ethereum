@@ -21,13 +21,16 @@ extern crate dir;
 extern crate ethereum_types;
 extern crate vm;
 
+
+use ethereum_types::{H256, Address};
+use std::collections::HashMap;
 use std::io;
 use std::{fmt, str};
+
 
 mod csv_storage_writer;
 mod noop;
 
-use ethereum_types::{H256, Address};
 
 /// Something that can write storage values to disk.
 pub trait StorageWriter: Send + Sync {
@@ -37,8 +40,8 @@ pub trait StorageWriter: Send + Sync {
     /// Whether storage writing is enabled.
     fn enabled(&self) -> bool;
 
-    /// Write storage node to disk.
-    fn write_storage_node(&mut self, contract: Address, block_hash: H256, block_number: u64, key: H256, value: H256) -> io::Result<()>;
+    /// Write storage diffs for modified accounts to disk
+    fn write_storage_diffs(&mut self, header_hash: H256, header_number: u64, accounts_storage_changes: HashMap<Address, HashMap<H256, H256>>) -> io::Result<()>;
 }
 
 impl Clone for Box<StorageWriter> {
@@ -48,9 +51,9 @@ impl Clone for Box<StorageWriter> {
 }
 
 /// Create a new `StorageWriter` trait object.
-pub fn new(database: Database) -> Box<StorageWriter> {
-    match database {
-        Database::Csv => Box::new(csv_storage_writer::CsvStorageWriter::new()),
+pub fn new(config: StorageWriterConfig) -> Box<StorageWriter> {
+    match config.database {
+        Database::Csv => Box::new(csv_storage_writer::CsvStorageWriter::new(config.watched_contracts)),
         Database::None => Box::new(noop::NoopStorageWriter::new()),
     }
 }
@@ -120,12 +123,15 @@ impl Default for StorageWriterConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{Database, new};
+    use super::{Database, new, StorageWriterConfig};
 
     #[test]
     fn test_storage_writer_enabled() {
-        assert!(new(Database::Csv).enabled());
-        assert!(!new(Database::None).enabled());
+        let csv_config = StorageWriterConfig { watched_contracts: Vec::new(), database: Database::Csv };
+        let none_config = StorageWriterConfig { watched_contracts: Vec::new(), database: Database::None };
+
+        assert!(new(csv_config).enabled());
+        assert!(!new(none_config).enabled());
     }
 
     #[test]

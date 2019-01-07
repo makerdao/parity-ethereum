@@ -875,17 +875,20 @@ impl<B: Backend> State<B> {
 	}
 
     /// Write watched state/storage trie vals to secondary datastore
-    pub fn write_watched_state(&mut self, header_hash: H256, header_number: u64, watched_contracts: Vec<Address>, mut storage_writer: Box<storage_writer::StorageWriter>) -> Result<(), Error> {
-        let mut accounts = self.cache.borrow_mut();
-        for (address, ref mut a) in accounts.iter_mut().filter(|&(_, ref a)| a.is_dirty()) {
-            if watched_contracts.contains(address) {
-                if let Some(ref mut account) = a.account {
-                    for (k, v) in account.storage_changes() {
-                        storage_writer.write_storage_node(*address, header_hash, header_number, *k, *v)?;
+    pub fn write_watched_state(&mut self, header_hash: H256, header_number: u64, mut storage_writer: Box<storage_writer::StorageWriter>) -> Result<(), Error> {
+        let accounts_storage_diffs = {
+            let mut accounts_storage_diffs: HashMap<Address, HashMap<H256, H256>> = HashMap::new();
+            for (key, val) in self.cache.borrow().iter() {
+                if let Some(entry) = val.clone_if_dirty() {
+                    if let Some(a) = entry.account {
+                        let storage_changes = a.storage_changes();
+                        accounts_storage_diffs.insert(key.clone(), storage_changes.clone());
                     }
                 }
             }
-        }
+            accounts_storage_diffs
+        };
+        storage_writer.write_storage_diffs(header_hash, header_number,accounts_storage_diffs)?;
         Ok(())
     }
 
