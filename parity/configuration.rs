@@ -937,9 +937,11 @@ impl Configuration {
 
 	fn storage_writer_config(&self) -> Result<StorageWriterConfig, String> {
 		let storage_writing: StorageWriting = self.args.arg_storage_writing.parse()?;
+		let storage_writing_path = self.directories().storage_diffs;
 		let storage_writer_conf = StorageWriterConfig{
-			watched_contracts: to_addresses(&self.args.arg_watched_contracts)?,
 			database: storage_writing.to_database(),
+			path: storage_writing_path,
+			watched_contracts: to_addresses(&self.args.arg_watched_contracts)?,
 		};
 		Ok(storage_writer_conf)
 	}
@@ -1014,11 +1016,17 @@ impl Configuration {
 		};
 		let cache_path = if is_using_base_path { "$BASE/cache" } else { dir::CACHE_PATH };
 
+		let chosen_storage_diffs_path = if self.args.arg_storage_writing_path.is_none() {
+			"$BASE/storage_diffs"
+		} else {
+			self.args.arg_storage_writing_path.as_ref().map_or(dir::STORAGE_DIFF_PATH, |s| &s)
+		};
 		let db_path = replace_home_and_local(&data_path, &local_path, &base_db_path);
 		let cache_path = replace_home_and_local(&data_path, &local_path, cache_path);
 		let keys_path = replace_home(&data_path, &self.args.arg_keys_path);
 		let secretstore_path = replace_home(&data_path, &self.args.arg_secretstore_path);
 		let ui_path = replace_home(&data_path, &self.args.arg_ui_path);
+		let storage_diffs_path = replace_home(&data_path, chosen_storage_diffs_path);
 
 		Directories {
 			keys: keys_path,
@@ -1027,6 +1035,7 @@ impl Configuration {
 			db: db_path,
 			signer: ui_path,
 			secretstore: secretstore_path,
+			storage_diffs: storage_diffs_path,
 		}
 	}
 

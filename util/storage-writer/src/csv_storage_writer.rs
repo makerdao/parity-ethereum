@@ -20,21 +20,24 @@ use std::fs;
 use std::fs::File;
 use std::sync::{Arc, Mutex};
 
-use super::StorageWriter;
+use super::{Database,StorageWriter,StorageWriterConfig};
 use csv::Writer;
-use dir::helpers::replace_home;
-use dir::default_data_path;
 use ethereum_types::{Address, H256};
 
+/// Implementation of `StorageWriter` trait for writing to CSV file.
 #[derive(Clone)]
 pub struct CsvStorageWriter {
+    /// Path to CSV
+    path: String,
+    /// Contracts for which to write storage diffs
     watched_contracts: Vec<Address>,
+    /// File writing connection to CSV
     writer: Arc<Mutex<Writer<File>>>
 }
 
 impl CsvStorageWriter {
-    pub fn new(watched_contracts: Vec<Address>) -> CsvStorageWriter {
-        let path = replace_home(&default_data_path(), "$BASE/watched_storage");
+    pub fn new(config: StorageWriterConfig) -> CsvStorageWriter {
+        let path = config.path;
 
         // TODO: handle error differently on file creation
         let file = fs::OpenOptions::new()
@@ -42,13 +45,14 @@ impl CsvStorageWriter {
             .write(true)
             .create(true)
             .append(true)
-            .open(path)
+            .open(path.clone())
             .expect("Error creating csv file.");
 
         let wtr = csv::Writer::from_writer(file);
 
         CsvStorageWriter {
-            watched_contracts: watched_contracts,
+            path: path,
+            watched_contracts: config.watched_contracts,
             writer: Arc::new(Mutex::new(wtr))
         }
     }
@@ -63,7 +67,12 @@ impl CsvStorageWriter {
 
 impl StorageWriter for CsvStorageWriter {
     fn boxed_clone(&self) -> Box<StorageWriter> {
-        Box::new(CsvStorageWriter::new(self.watched_contracts.to_vec()))
+        let config = StorageWriterConfig {
+            database: Database::Csv,
+            path: self.path.clone(),
+            watched_contracts: self.watched_contracts.to_vec(),
+        };
+        Box::new(CsvStorageWriter::new(config))
     }
 
     fn enabled(&self) -> bool {
@@ -82,3 +91,57 @@ impl StorageWriter for CsvStorageWriter {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::fs;
+    use ethereum_types::{clean_0x, Address, H256};
+    use tempdir::TempDir;
+    use super::{CsvStorageWriter,Database,StorageWriter,StorageWriterConfig};
+
+    #[test]
+    fn test_writes_watched_diff() {
+        // setup storage writer with temp file
+        let tempdir = TempDir::new("temp_storage_csv").unwrap();
+        let file_path = tempdir.path().join("file");
+        let watched_contract : Address = clean_0x("0xdeadbeefcafe0000000000000000000000000000").parse().unwrap();
+        let watched_contracts = vec![watched_contract];
+        let config = StorageWriterConfig {
+            database: Database::Csv,
+            path: file_path.to_str().unwrap().into(),
+            watched_contracts: watched_contracts,
+        };
+        let mut storage_writer = CsvStorageWriter::new(config);
+
+        // setup args for writing storage diffs
+        let watched_contract_storage_key = H256::from("0000000000000000000000000000000000000000000000000000000000000001");
+        let watched_contract_storage_value = H256::from("0000000000000000000000000000000000000000000000000000000000000002");
+        let watched_contract_storage_diff : HashMap<H256, H256> = [(watched_contract_storage_key, watched_contract_storage_value)].iter().cloned().collect();
+        let unwatched_contract : Address = clean_0x("0x123456789abc0000000000000000000000000000").parse().unwrap();
+        let unwatched_contract_storage_key = H256::from("0000000000000000000000000000000000000000000000000000000000000003");
+        let unwatched_contract_storage_value = H256::from("0000000000000000000000000000000000000000000000000000000000000004");
+        let unwatched_contract_storage_diff : HashMap<H256, H256> = [(unwatched_contract_storage_key, unwatched_contract_storage_value)].iter().cloned().collect();
+        let accounts_storage_diffs : HashMap<Address, HashMap<H256, H256>> =
+            [(unwatched_contract, unwatched_contract_storage_diff),
+                (watched_contract, watched_contract_storage_diff)]
+                .iter().cloned().collect();
+        let header_hash = H256::from("0xa3c565fc15c7478862d50ccd6561e3c06b24cc509bf388941c25ea985ce32cb9");
+
+        // execute storage writer
+        let _ = storage_writer.write_storage_diffs(header_hash, 0, accounts_storage_diffs);
+
+        // verify only watched contract storage diffs written
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .open(file_path.clone())
+            .expect("Error opening temp csv file.");
+        let mut rdr = csv::Reader::from_reader(file);
+        let expected_record = csv::StringRecord::from(vec![format!("{:x}", watched_contract), format!("{:x}", header_hash), format!("{}", 0), format!("{:x}", watched_contract_storage_key), format!("{:x}", watched_contract_storage_value)]);
+        for result in rdr.records() {
+            match result {
+                Ok(record) => assert_eq!(record, expected_record),
+                Err(_err) => panic!("Unexpected record in storage diffs"),
+            }
+        }
+    }
+}

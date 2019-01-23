@@ -19,9 +19,11 @@
 extern crate csv;
 extern crate dir;
 extern crate ethereum_types;
+extern crate tempdir;
 extern crate vm;
 
-
+use dir::default_data_path;
+use dir::helpers::replace_home;
 use ethereum_types::{H256, Address};
 use std::collections::HashMap;
 use std::io;
@@ -53,7 +55,7 @@ impl Clone for Box<StorageWriter> {
 /// Create a new `StorageWriter` trait object.
 pub fn new(config: StorageWriterConfig) -> Box<StorageWriter> {
     match config.database {
-        Database::Csv => Box::new(csv_storage_writer::CsvStorageWriter::new(config.watched_contracts)),
+        Database::Csv => Box::new(csv_storage_writer::CsvStorageWriter::new(config)),
         Database::None => Box::new(noop::NoopStorageWriter::new()),
     }
 }
@@ -106,17 +108,21 @@ impl fmt::Display for Database {
 /// Configuration for writing storage diffs from watched contracts
 #[derive(PartialEq, Debug, Clone)]
 pub struct StorageWriterConfig {
-    /// Contracts to be watched
-    pub watched_contracts: Vec<Address>,
-    /// Database used for persisting contract storage diffs
+    /// Database used for persisting contract storage diffs.
     pub database: Database,
+    /// Where to locate database for storage diffs.
+    pub path: String,
+    /// Contracts to be watched.
+    pub watched_contracts: Vec<Address>,
 }
 
 impl Default for StorageWriterConfig {
     fn default() -> Self {
+        let data_dir = default_data_path();
         StorageWriterConfig {
+            database: Database::None,
+            path: replace_home(&data_dir, "$BASE/storage_diffs"),
             watched_contracts: Vec::new(),
-            database: Database::None
         }
     }
 }
@@ -127,8 +133,8 @@ mod tests {
 
     #[test]
     fn test_storage_writer_enabled() {
-        let csv_config = StorageWriterConfig { watched_contracts: Vec::new(), database: Database::Csv };
-        let none_config = StorageWriterConfig { watched_contracts: Vec::new(), database: Database::None };
+        let csv_config = StorageWriterConfig { watched_contracts: Vec::new(), database: Database::Csv, path: "test".to_string() };
+        let none_config = StorageWriterConfig { watched_contracts: Vec::new(), database: Database::None, path: "test".to_string() };
 
         assert!(new(csv_config).enabled());
         assert!(!new(none_config).enabled());
