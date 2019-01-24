@@ -878,7 +878,7 @@ usage! {
 
 			ARG arg_watched_contracts: (Option<String>) = None, or |c: &Config| c.account.as_ref()?.unlock.as_ref().map(|vec| vec.join(",")),
 			"--watch-contracts=[ACCOUNTS]",
-			"Specify contracts for which to watch storage trie diffs. ACCOUNTS is a comma-delimited list of addresses.",
+			"Specify contracts for which to watch storage trie diffs. ACCOUNTS is a comma-delimited list of addresses. Defaults to watching all storage diffs if no accounts specified.",
 
 			ARG arg_cache_size_db: (u32) = 128u32, or |c: &Config| c.footprint.as_ref()?.cache_size_db.clone(),
 			"--cache-size-db=[MB]",

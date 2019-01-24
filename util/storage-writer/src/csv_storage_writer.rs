@@ -41,7 +41,6 @@ impl CsvStorageWriter {
         let path = config.path;
         let file = path.join("storage_diffs.csv");
 
-        // TODO: handle error differently on file creation
         let file = fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -65,6 +64,10 @@ impl CsvStorageWriter {
         wtr.flush()?;
         Ok(())
     }
+
+    fn watching_all_diffs(&self) -> bool {
+        self.watched_contracts.len() == 0
+    }
 }
 
 impl StorageWriter for CsvStorageWriter {
@@ -84,7 +87,7 @@ impl StorageWriter for CsvStorageWriter {
 
     fn write_storage_diffs(&mut self, header_hash: H256, header_number: u64, accounts_storage_diffs: HashMap<Address, HashMap<H256, H256>>) -> io::Result<()> {
         for (addr, diffs) in accounts_storage_diffs {
-            if self.watched_contracts.contains(&addr) {
+            if self.watching_all_diffs() || self.watched_contracts.contains(&addr) {
                 for (k, v) in diffs {
                     self.write_storage_node(addr, header_hash, header_number, k, v)?;
                 }
@@ -92,6 +95,7 @@ impl StorageWriter for CsvStorageWriter {
         }
         Ok(())
     }
+
 }
 
 #[cfg(test)]
@@ -118,7 +122,7 @@ mod tests {
 
     #[test]
     fn test_writes_watched_diff() {
-        // setup storage writer with temp file
+        // setup storage writer with watched contract specified
         let tempdir = TempDir::new("temp_storage_csv").unwrap();
         let file_path = tempdir.path().join("storage_diffs.csv");
         let watched_contract : Address = clean_0x("0xdeadbeefcafe0000000000000000000000000000").parse().unwrap();
@@ -155,6 +159,45 @@ mod tests {
             .expect("Error opening temp csv file.");
         let mut rdr = csv::Reader::from_reader(file);
         let expected_record = csv::StringRecord::from(vec![format!("{:x}", watched_contract), format!("{:x}", header_hash), format!("{}", 0), format!("{:x}", watched_contract_storage_key), format!("{:x}", watched_contract_storage_value)]);
+        for result in rdr.records() {
+            match result {
+                Ok(record) => assert_eq!(record, expected_record),
+                Err(_err) => panic!("Unexpected record in storage diffs"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_writes_all_diffs_if_watched_contracts_not_specified() {
+        // setup storage writer with no watched contracts specified
+        let tempdir = TempDir::new("temp_storage_csv").unwrap();
+        let file_path = tempdir.path().join("storage_diffs.csv");
+        let config = StorageWriterConfig {
+            database: Database::Csv,
+            enabled: true,
+            path: tempdir.path().into(),
+            watched_contracts: vec![],
+        };
+        let mut storage_writer = CsvStorageWriter::new(config);
+
+        // setup args for writing storage diffs
+        let contract : Address = clean_0x("0xdeadbeefcafe0000000000000000000000000000").parse().unwrap();
+        let contract_storage_key = H256::from("0000000000000000000000000000000000000000000000000000000000000003");
+        let contract_storage_value = H256::from("0000000000000000000000000000000000000000000000000000000000000004");
+        let contract_storage_diff : HashMap<H256, H256> = [(contract_storage_key, contract_storage_value)].iter().cloned().collect();
+        let accounts_storage_diffs : HashMap<Address, HashMap<H256, H256>> = [(contract, contract_storage_diff)].iter().cloned().collect();
+        let header_hash = H256::from("0xa3c565fc15c7478862d50ccd6561e3c06b24cc509bf388941c25ea985ce32cb9");
+
+        // execute storage writer
+        let _ = storage_writer.write_storage_diffs(header_hash, 0, accounts_storage_diffs);
+
+        // verify storage diffs written
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .open(file_path.clone())
+            .expect("Error opening temp csv file.");
+        let mut rdr = csv::Reader::from_reader(file);
+        let expected_record = csv::StringRecord::from(vec![format!("{:x}", contract), format!("{:x}", header_hash), format!("{}", 0), format!("{:x}", contract_storage_key), format!("{:x}", contract_storage_value)]);
         for result in rdr.records() {
             match result {
                 Ok(record) => assert_eq!(record, expected_record),
