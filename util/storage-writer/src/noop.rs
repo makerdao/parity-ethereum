@@ -42,3 +42,15 @@ impl StorageWriter for NoopStorageWriter {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{NoopStorageWriter, StorageWriter};
+
+    #[test]
+    fn test_not_enabled() {
+        let storage_writer = NoopStorageWriter::new();
+
+        assert!(!storage_writer.enabled())
+    }
+}

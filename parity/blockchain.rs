@@ -84,6 +84,7 @@ pub struct ResetBlockchain {
 	pub pruning: Pruning,
 	pub pruning_history: u64,
 	pub pruning_memory: usize,
+	pub storage_writer_config: StorageWriterConfig,
 	pub tracing: Switch,
 	pub fat_db: Switch,
 	pub compaction: DatabaseCompactionProfile,
@@ -210,7 +211,7 @@ fn execute_import_light(cmd: ImportBlockchain) -> Result<(), String> {
 	execute_upgrades(&cmd.dirs.base, &db_dirs, algorithm, &cmd.compaction)?;
 
 	// create dirs used by parity
-	cmd.dirs.create_dirs(false, false)?;
+	cmd.dirs.create_dirs(false, false, cmd.storage_writer_config.enabled)?;
 
 	let cache = Arc::new(Mutex::new(
 		LightDataCache::new(Default::default(), Duration::new(0, 0))
@@ -366,7 +367,7 @@ fn execute_import(cmd: ImportBlockchain) -> Result<(), String> {
 	execute_upgrades(&cmd.dirs.base, &db_dirs, algorithm, &cmd.compaction)?;
 
 	// create dirs used by parity
-	cmd.dirs.create_dirs(false, false)?;
+	cmd.dirs.create_dirs(false, false, storage_writer_config.enabled)?;
 
 	// prepare client config
 	let mut client_config = to_client_config(
@@ -562,7 +563,7 @@ fn start_client(
 	execute_upgrades(&dirs.base, &db_dirs, algorithm, &compaction)?;
 
 	// create dirs used by parity
-	dirs.create_dirs(false, false)?;
+	dirs.create_dirs(false, false, storage_writer_config.enabled)?;
 
 	// prepare client config
 	let client_config = to_client_config(
@@ -746,6 +747,7 @@ fn execute_reset(cmd: ResetBlockchain) -> Result<(), String> {
 		cmd.pruning,
 		cmd.pruning_history,
 		cmd.pruning_memory,
+		cmd.storage_writer_config,
 		cmd.tracing,
 		cmd.fat_db,
 		cmd.compaction,

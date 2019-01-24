@@ -185,6 +185,7 @@ impl Configuration {
 				pruning,
 				pruning_history,
 				pruning_memory: self.args.arg_pruning_memory,
+				storage_writer_config,
 				tracing,
 				fat_db,
 				compaction,
@@ -940,7 +941,8 @@ impl Configuration {
 		let storage_writing_path = self.directories().storage_diffs;
 		let storage_writer_conf = StorageWriterConfig{
 			database: storage_writing.to_database(),
-			path: storage_writing_path,
+			enabled: !storage_writing.eq(&StorageWriting::Off),
+			path: storage_writing_path.into(),
 			watched_contracts: to_addresses(&self.args.arg_watched_contracts)?,
 		};
 		Ok(storage_writer_conf)

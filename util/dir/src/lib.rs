@@ -94,7 +94,7 @@ impl Default for Directories {
 
 impl Directories {
 	/// Create local directories
-	pub fn create_dirs(&self, signer_enabled: bool, secretstore_enabled: bool) -> Result<(), String> {
+	pub fn create_dirs(&self, signer_enabled: bool, secretstore_enabled: bool, storage_diffs_enabled: bool) -> Result<(), String> {
 		fs::create_dir_all(&self.base).map_err(|e| e.to_string())?;
 		fs::create_dir_all(&self.db).map_err(|e| e.to_string())?;
 		fs::create_dir_all(&self.cache).map_err(|e| e.to_string())?;
@@ -105,7 +105,9 @@ impl Directories {
 		if secretstore_enabled {
 			fs::create_dir_all(&self.secretstore).map_err(|e| e.to_string())?;
 		}
-		// TODO: Create storage directory?
+		if storage_diffs_enabled {
+			fs::create_dir_all(&self.storage_diffs).map_err(|e| e.to_string())?;
+		}
 		Ok(())
 	}
 

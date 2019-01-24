@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use std::io;
 use std::fs;
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use super::{Database,StorageWriter,StorageWriterConfig};
@@ -28,7 +29,7 @@ use ethereum_types::{Address, H256};
 #[derive(Clone)]
 pub struct CsvStorageWriter {
     /// Path to CSV
-    path: String,
+    path: PathBuf,
     /// Contracts for which to write storage diffs
     watched_contracts: Vec<Address>,
     /// File writing connection to CSV
@@ -38,6 +39,7 @@ pub struct CsvStorageWriter {
 impl CsvStorageWriter {
     pub fn new(config: StorageWriterConfig) -> CsvStorageWriter {
         let path = config.path;
+        let file = path.join("storage_diffs.csv");
 
         // TODO: handle error differently on file creation
         let file = fs::OpenOptions::new()
@@ -45,7 +47,7 @@ impl CsvStorageWriter {
             .write(true)
             .create(true)
             .append(true)
-            .open(path.clone())
+            .open(file)
             .expect("Error creating csv file.");
 
         let wtr = csv::Writer::from_writer(file);
@@ -69,6 +71,7 @@ impl StorageWriter for CsvStorageWriter {
     fn boxed_clone(&self) -> Box<StorageWriter> {
         let config = StorageWriterConfig {
             database: Database::Csv,
+            enabled: true,
             path: self.path.clone(),
             watched_contracts: self.watched_contracts.to_vec(),
         };
@@ -100,15 +103,30 @@ mod tests {
     use super::{CsvStorageWriter,Database,StorageWriter,StorageWriterConfig};
 
     #[test]
+    fn test_enabled() {
+        let tempdir = TempDir::new("temp_storage_csv").unwrap();
+        let config = StorageWriterConfig {
+            database: Database::Csv,
+            enabled: true,
+            path: tempdir.path().into(),
+            watched_contracts: vec![],
+        };
+        let storage_writer = CsvStorageWriter::new(config);
+
+        assert!(storage_writer.enabled())
+    }
+
+    #[test]
     fn test_writes_watched_diff() {
         // setup storage writer with temp file
         let tempdir = TempDir::new("temp_storage_csv").unwrap();
-        let file_path = tempdir.path().join("file");
+        let file_path = tempdir.path().join("storage_diffs.csv");
         let watched_contract : Address = clean_0x("0xdeadbeefcafe0000000000000000000000000000").parse().unwrap();
         let watched_contracts = vec![watched_contract];
         let config = StorageWriterConfig {
             database: Database::Csv,
-            path: file_path.to_str().unwrap().into(),
+            enabled: true,
+            path: tempdir.path().into(),
             watched_contracts: watched_contracts,
         };
         let mut storage_writer = CsvStorageWriter::new(config);

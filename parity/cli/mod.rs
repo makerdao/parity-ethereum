@@ -874,7 +874,7 @@ usage! {
 
 			ARG arg_storage_writing_path: (Option<String>) = None, or |c: &Config| c.footprint.as_ref()?.storage_writing_path.clone(),
 			"--storage-writing-path=[PATH]",
-			"Specify the storage diff writing path",
+			"Specify the storage diff writing directory path",
 
 			ARG arg_watched_contracts: (Option<String>) = None, or |c: &Config| c.account.as_ref()?.unlock.as_ref().map(|vec| vec.join(",")),
 			"--watch-contracts=[ACCOUNTS]",

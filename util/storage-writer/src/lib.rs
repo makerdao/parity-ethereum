@@ -28,6 +28,7 @@ use ethereum_types::{H256, Address};
 use std::collections::HashMap;
 use std::io;
 use std::{fmt, str};
+use std::path::PathBuf;
 
 
 mod csv_storage_writer;
@@ -110,8 +111,10 @@ impl fmt::Display for Database {
 pub struct StorageWriterConfig {
     /// Database used for persisting contract storage diffs.
     pub database: Database,
+    /// Whether storage diff writing is enabled.
+    pub enabled: bool,
     /// Where to locate database for storage diffs.
-    pub path: String,
+    pub path: PathBuf,
     /// Contracts to be watched.
     pub watched_contracts: Vec<Address>,
 }
@@ -121,7 +124,8 @@ impl Default for StorageWriterConfig {
         let data_dir = default_data_path();
         StorageWriterConfig {
             database: Database::None,
-            path: replace_home(&data_dir, "$BASE/storage_diffs"),
+            enabled: false,
+            path: replace_home(&data_dir, "$BASE/storage_diffs").into(),
             watched_contracts: Vec::new(),
         }
     }
@@ -129,16 +133,7 @@ impl Default for StorageWriterConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{Database, new, StorageWriterConfig};
-
-    #[test]
-    fn test_storage_writer_enabled() {
-        let csv_config = StorageWriterConfig { watched_contracts: Vec::new(), database: Database::Csv, path: "test".to_string() };
-        let none_config = StorageWriterConfig { watched_contracts: Vec::new(), database: Database::None, path: "test".to_string() };
-
-        assert!(new(csv_config).enabled());
-        assert!(!new(none_config).enabled());
-    }
+    use super::Database;
 
     #[test]
     fn test_storage_writer_database_parsing() {
