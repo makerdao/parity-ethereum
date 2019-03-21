@@ -34,11 +34,14 @@ use unexpected::{Mismatch, OutOfBounds};
 use blockchain::*;
 use call_contract::CallContract;
 use client::BlockInfo;
-use engines::EthEngine;
+use engines::{EthEngine, MAX_UNCLE_AGE};
 use error::{BlockError, Error};
 use types::{BlockNumber, header::Header};
 use types::transaction::SignedTransaction;
 use verification::queue::kind::blocks::Unverified;
+
+#[cfg(not(time_checked_add))]
+use time_utils::CheckedSystemTime;
 
 /// Preprocessed block data gathered in `verify_block_unordered` call
 pub struct PreverifiedBlock {
@@ -173,7 +176,7 @@ fn verify_uncles(block: &PreverifiedBlock, bc: &BlockProvider, engine: &EthEngin
 		excluded.insert(header.hash());
 		let mut hash = header.parent_hash().clone();
 		excluded.insert(hash.clone());
-		for _ in 0..engine.maximum_uncle_age() {
+		for _ in 0..MAX_UNCLE_AGE {
 			match bc.block_details(&hash) {
 				Some(details) => {
 					excluded.insert(details.parent);
@@ -206,7 +209,7 @@ fn verify_uncles(block: &PreverifiedBlock, bc: &BlockProvider, engine: &EthEngin
 			//												(8 Invalid)
 
 			let depth = if header.number() > uncle.number() { header.number() - uncle.number() } else { 0 };
-			if depth > engine.maximum_uncle_age() as u64 {
+			if depth > MAX_UNCLE_AGE as u64 {
 				return Err(From::from(BlockError::UncleTooOld(OutOfBounds { min: Some(header.number() - depth), max: Some(header.number() - 1), found: uncle.number() })));
 			}
 			else if depth < 1 {
@@ -255,7 +258,7 @@ pub fn verify_block_final(expected: &Header, got: &Header) -> Result<(), Error> 
 		return Err(From::from(BlockError::InvalidGasUsed(Mismatch { expected: *expected.gas_used(), found: *got.gas_used() })))
 	}
 	if expected.log_bloom() != got.log_bloom() {
-		return Err(From::from(BlockError::InvalidLogBloom(Mismatch { expected: *expected.log_bloom(), found: *got.log_bloom() })))
+		return Err(From::from(BlockError::InvalidLogBloom(Box::new(Mismatch { expected: *expected.log_bloom(), found: *got.log_bloom() }))))
 	}
 	if expected.receipts_root() != got.receipts_root() {
 		return Err(From::from(BlockError::InvalidReceiptsRoot(Mismatch { expected: *expected.receipts_root(), found: *got.receipts_root() })))
@@ -304,9 +307,11 @@ pub fn verify_header_params(header: &Header, engine: &EthEngine, is_full: bool, 
 
 	if is_full {
 		const ACCEPTABLE_DRIFT: Duration = Duration::from_secs(15);
+		// this will resist overflow until `year 2037`
 		let max_time = SystemTime::now() + ACCEPTABLE_DRIFT;
 		let invalid_threshold = max_time + ACCEPTABLE_DRIFT * 9;
-		let timestamp = UNIX_EPOCH + Duration::from_secs(header.timestamp());
+		let timestamp = UNIX_EPOCH.checked_add(Duration::from_secs(header.timestamp()))
+			.ok_or(BlockError::TimestampOverflow)?;
 
 		if timestamp > invalid_threshold {
 			return Err(From::from(BlockError::InvalidTimestamp(OutOfBounds { max: Some(max_time), min: None, found: timestamp })))
@@ -328,8 +333,11 @@ fn verify_parent(header: &Header, parent: &Header, engine: &EthEngine) -> Result
 	let gas_limit_divisor = engine.params().gas_limit_bound_divisor;
 
 	if !engine.is_timestamp_valid(header.timestamp(), parent.timestamp()) {
-		let min = SystemTime::now() + Duration::from_secs(parent.timestamp() + 1);
-		let found = SystemTime::now() + Duration::from_secs(header.timestamp());
+		let now = SystemTime::now();
+		let min = now.checked_add(Duration::from_secs(parent.timestamp().saturating_add(1)))
+			.ok_or(BlockError::TimestampOverflow)?;
+		let found = now.checked_add(Duration::from_secs(header.timestamp()))
+			.ok_or(BlockError::TimestampOverflow)?;
 		return Err(From::from(BlockError::InvalidTimestamp(OutOfBounds { max: None, min: Some(min), found })))
 	}
 	if header.number() != parent.number() + 1 {
@@ -743,7 +751,8 @@ mod tests {
 		check_fail_timestamp(family_test(&create_test_block_with_data(&header, &good_transactions, &good_uncles), engine, &bc), false);
 
 		header = good.clone();
-		header.set_timestamp(2450000000);
+		// will return `BlockError::TimestampOverflow` when timestamp > `i32::max_value()`
+		header.set_timestamp(i32::max_value() as u64);
 		check_fail_timestamp(basic_test(&create_test_block_with_data(&header, &good_transactions, &good_uncles), engine), false);
 
 		header = good.clone();

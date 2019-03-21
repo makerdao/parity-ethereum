@@ -16,6 +16,10 @@
 
 //! General error types for use in ethcore.
 
+// Silence: `use of deprecated item 'std::error::Error::cause': replaced by Error::source, which can support downcasting`
+// https://github.com/paritytech/parity-ethereum/issues/10302
+#![allow(deprecated)]
+
 use std::{fmt, error};
 use std::time::SystemTime;
 
@@ -33,7 +37,7 @@ use engines::EngineError;
 
 pub use executed::{ExecutionError, CallError};
 
-#[derive(Debug, PartialEq, Clone, Copy, Eq)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 /// Errors concerning block processing.
 pub enum BlockError {
 	/// Block has too many uncles.
@@ -84,11 +88,13 @@ pub enum BlockError {
 	/// Timestamp header field is too far in future.
 	TemporarilyInvalid(OutOfBounds<SystemTime>),
 	/// Log bloom header field is invalid.
-	InvalidLogBloom(Mismatch<Bloom>),
+	InvalidLogBloom(Box<Mismatch<Bloom>>),
 	/// Number field of header is invalid.
 	InvalidNumber(Mismatch<BlockNumber>),
 	/// Block number isn't sensible.
 	RidiculousNumber(OutOfBounds<BlockNumber>),
+	/// Timestamp header overflowed
+	TimestampOverflow,
 	/// Too many transactions from a particular address.
 	TooManyTransactions(Address),
 	/// Parent given is unknown.
@@ -138,6 +144,7 @@ impl fmt::Display for BlockError {
 			UnknownParent(ref hash) => format!("Unknown parent: {}", hash),
 			UnknownUncleParent(ref hash) => format!("Unknown uncle parent: {}", hash),
 			UnknownEpochTransition(ref num) => format!("Unknown transition to epoch number: {}", num),
+			TimestampOverflow => format!("Timestamp overflow"),
 			TooManyTransactions(ref address) => format!("Too many transactions from: {}", address),
 		};
 

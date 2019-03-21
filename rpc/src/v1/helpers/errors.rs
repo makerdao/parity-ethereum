@@ -43,7 +43,9 @@ mod codes {
 	pub const EXECUTION_ERROR: i64 = -32015;
 	pub const EXCEPTION_ERROR: i64 = -32016;
 	pub const DATABASE_ERROR: i64 = -32017;
+	#[cfg(any(test, feature = "accounts"))]
 	pub const ACCOUNT_LOCKED: i64 = -32020;
+	#[cfg(any(test, feature = "accounts"))]
 	pub const PASSWORD_INVALID: i64 = -32021;
 	pub const ACCOUNT_ERROR: i64 = -32023;
 	pub const PRIVATE_ERROR: i64 = -32024;
@@ -57,6 +59,7 @@ mod codes {
 	pub const NO_PEERS: i64 = -32066;
 	pub const DEPRECATED: i64 = -32070;
 	pub const EXPERIMENTAL_RPC: i64 = -32071;
+	pub const CANNOT_RESTART: i64 = -32080;
 }
 
 pub fn unimplemented(details: Option<String>) -> Error {
@@ -120,6 +123,14 @@ pub fn account<T: fmt::Debug>(error: &str, details: T) -> Error {
 		code: ErrorCode::ServerError(codes::ACCOUNT_ERROR),
 		message: error.into(),
 		data: Some(Value::String(format!("{:?}", details))),
+	}
+}
+
+pub fn cannot_restart() -> Error {
+	Error {
+		code: ErrorCode::ServerError(codes::CANNOT_RESTART),
+		message: "Parity could not be restarted. This feature is disabled in development mode and if the binary name isn't parity.".into(),
+		data: None,
 	}
 }
 
@@ -336,6 +347,7 @@ pub fn fetch<T: fmt::Debug>(error: T) -> Error {
 	}
 }
 
+#[cfg(any(test, feature = "accounts"))]
 pub fn invalid_call_data<T: fmt::Display>(error: T) -> Error {
 	Error {
 		code: ErrorCode::ServerError(codes::ENCODING_ERROR),
