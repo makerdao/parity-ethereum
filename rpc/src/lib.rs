@@ -17,6 +17,25 @@
 //! Parity RPC.
 
 #![warn(missing_docs, unused_extern_crates)]
+#![cfg_attr(feature = "cargo-clippy", warn(clippy::all, clippy::pedantic))]
+#![cfg_attr(
+	feature = "cargo-clippy",
+	allow(
+		// things are often more readable this way
+		clippy::cast_lossless,
+		clippy::module_name_repetitions,
+		clippy::single_match_else,
+		clippy::type_complexity,
+		clippy::use_self,
+		// not practical
+		clippy::match_bool,
+		clippy::needless_pass_by_value,
+		clippy::similar_names,
+		// don't require markdown syntax for docs
+		clippy::doc_markdown,
+	),
+	warn(clippy::indexing_slicing)
+)]
 
 #[macro_use]
 extern crate futures;
@@ -115,7 +134,8 @@ pub use http::{
 };
 
 pub use v1::{NetworkSettings, Metadata, Origin, informant, dispatch, signer};
-pub use v1::block_import::{is_major_importing, is_major_importing_or_waiting};
+pub use v1::block_import::{is_major_importing_or_waiting};
+pub use v1::PubSubSyncStatus;
 pub use v1::extractors::{RpcExtractor, WsExtractor, WsStats, WsDispatcher};
 pub use authcodes::{AuthCodes, TimeProvider};
 pub use http_common::HttpMetaExtractor;
@@ -145,8 +165,8 @@ pub fn start_http<M, S, H, T>(
 	Ok(http::ServerBuilder::with_meta_extractor(handler, extractor)
 		.keep_alive(keep_alive)
 		.threads(threads)
-		.cors(cors_domains.into())
-		.allowed_hosts(allowed_hosts.into())
+		.cors(cors_domains)
+		.allowed_hosts(allowed_hosts)
 		.health_api(("/api/health", "parity_nodeStatus"))
 		.cors_allow_headers(AccessControlAllowHeaders::Any)
 		.max_request_body_size(max_payload * 1024 * 1024)
@@ -176,8 +196,8 @@ pub fn start_http_with_middleware<M, S, H, T, R>(
 	Ok(http::ServerBuilder::with_meta_extractor(handler, extractor)
 		.keep_alive(keep_alive)
 		.threads(threads)
-		.cors(cors_domains.into())
-		.allowed_hosts(allowed_hosts.into())
+		.cors(cors_domains)
+		.allowed_hosts(allowed_hosts)
 		.cors_allow_headers(AccessControlAllowHeaders::Any)
 		.max_request_body_size(max_payload * 1024 * 1024)
 		.request_middleware(middleware)
