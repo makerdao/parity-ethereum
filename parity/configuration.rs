@@ -17,7 +17,6 @@
 use std::time::Duration;
 use std::io::Read;
 use std::net::SocketAddr;
-use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::collections::{HashSet, BTreeMap};
 use std::iter::FromIterator;
@@ -146,8 +145,11 @@ impl Configuration {
 		let secretstore_conf = self.secretstore_config()?;
 		let format = self.format()?;
 		let storage_writer_config = self.storage_writer_config()?;
-		let keys_iterations = NonZeroU32::new(self.args.arg_keys_iterations)
-			.ok_or_else(|| "--keys-iterations must be non-zero")?;
+
+		let key_iterations = self.args.arg_keys_iterations;
+		if key_iterations == 0 {
+			return Err("--key-iterations must be non-zero".into());
+		}
 
 		let cmd = if self.args.flag_version {
 			Cmd::Version
@@ -205,7 +207,7 @@ impl Configuration {
 		} else if self.args.cmd_account {
 			let account_cmd = if self.args.cmd_account_new {
 				let new_acc = NewAccount {
-					iterations: keys_iterations,
+					iterations: key_iterations,
 					path: dirs.keys,
 					spec: spec,
 					password_file: self.accounts_config()?.password_files.first().map(|x| x.to_owned()),
@@ -239,7 +241,7 @@ impl Configuration {
 			Cmd::Account(account_cmd)
 		} else if self.args.cmd_wallet {
 			let presale_cmd = ImportWallet {
-				iterations: keys_iterations,
+				iterations: key_iterations,
 				path: dirs.keys,
 				spec: spec,
 				wallet_path: self.args.arg_wallet_import_path.clone().unwrap(),
@@ -541,10 +543,8 @@ impl Configuration {
 	}
 
 	fn accounts_config(&self) -> Result<AccountsConfig, String> {
-		let keys_iterations = NonZeroU32::new(self.args.arg_keys_iterations)
-			.ok_or_else(|| "--keys-iterations must be non-zero")?;
 		let cfg = AccountsConfig {
-			iterations: keys_iterations,
+			iterations: self.args.arg_keys_iterations,
 			refresh_time: self.args.arg_accounts_refresh,
 			testnet: self.args.flag_testnet,
 			password_files: self.args.arg_password.iter().map(|s| replace_home(&self.directories().base, s)).collect(),
@@ -719,7 +719,7 @@ impl Configuration {
 				for line in &lines {
 					match validate_node_url(line).map(Into::into) {
 						None => continue,
-						Some(sync::ErrorKind::AddressResolve(_)) => return Err(format!("Failed to resolve hostname of a boot node: {}", line)),
+						Some(sync::Error::AddressResolve(_)) => return Err(format!("Failed to resolve hostname of a boot node: {}", line)),
 						Some(_) => return Err(format!("Invalid node address format given for a boot node: {}", line)),
 					}
 				}
@@ -751,7 +751,7 @@ impl Configuration {
 		ret.listen_address = Some(format!("{}", listen));
 		ret.public_address = public.map(|p| format!("{}", p));
 		ret.use_secret = match self.args.arg_node_key.as_ref()
-			.map(|s| s.parse::<Secret>().or_else(|_| Secret::from_unsafe_slice(&keccak(s))).map_err(|e| format!("Invalid key: {:?}", e))
+			.map(|s| s.parse::<Secret>().or_else(|_| Secret::from_unsafe_slice(keccak(s).as_bytes())).map_err(|e| format!("Invalid key: {:?}", e))
 			) {
 			None => None,
 			Some(Ok(key)) => Some(key),
@@ -955,7 +955,7 @@ impl Configuration {
 			no_periodic: self.args.flag_no_periodic_snapshot,
 			processing_threads: match self.args.arg_snapshot_threads {
 				Some(threads) if threads > 0 => threads,
-				_ => ::std::cmp::max(1, num_cpus::get() / 2),
+				_ => ::std::cmp::max(1, num_cpus::get_physical() / 2),
 			},
 		};
 
@@ -1244,10 +1244,6 @@ mod tests {
 
 	use super::*;
 
-	lazy_static! {
-		static ref ITERATIONS: NonZeroU32 = NonZeroU32::new(10240).expect("10240 > 0; qed");
-	}
-
 	#[derive(Debug, PartialEq)]
 	struct TestPasswordReader(&'static str);
 
@@ -1269,7 +1265,7 @@ mod tests {
 		let args = vec!["parity", "account", "new"];
 		let conf = parse(&args);
 		assert_eq!(conf.into_command().unwrap().cmd, Cmd::Account(AccountCmd::New(NewAccount {
-			iterations: *ITERATIONS,
+			iterations: 10240,
 			path: Directories::default().keys,
 			password_file: None,
 			spec: SpecType::default(),
@@ -1304,7 +1300,7 @@ mod tests {
 		let args = vec!["parity", "wallet", "import", "my_wallet.json", "--password", "pwd"];
 		let conf = parse(&args);
 		assert_eq!(conf.into_command().unwrap().cmd, Cmd::ImportPresaleWallet(ImportWallet {
-			iterations: *ITERATIONS,
+			iterations: 10240,
 			path: Directories::default().keys,
 			wallet_path: "my_wallet.json".into(),
 			password_file: Some("pwd".into()),

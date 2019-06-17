@@ -33,7 +33,7 @@ use itertools::Itertools;
 use journaldb;
 use kvdb::{DBValue, KeyValueDB, DBTransaction};
 use parking_lot::{Mutex, RwLock};
-use rand::OsRng;
+use rand::rngs::OsRng;
 use types::transaction::{self, LocalizedTransaction, UnverifiedTransaction, SignedTransaction, Action};
 use trie::{TrieSpec, TrieFactory, Trie};
 use types::ancestry_action::AncestryAction;
@@ -154,7 +154,7 @@ struct Importer {
 	pub import_lock: Mutex<()>, // FIXME Maybe wrap the whole `Importer` instead?
 
 	/// Used to verify blocks
-	pub verifier: Box<Verifier<Client>>,
+	pub verifier: Box<dyn Verifier<Client>>,
 
 	/// Queue containing pending blocks
 	pub block_queue: BlockQueue,
@@ -166,7 +166,7 @@ struct Importer {
 	pub ancient_verifier: AncientVerifier,
 
 	/// Ethereum engine to be used during import
-	pub engine: Arc<EthEngine>,
+	pub engine: Arc<dyn EthEngine>,
 
 	/// A lru cache of recently detected bad blocks
 	pub bad_blocks: bad_blocks::BadBlocks,
@@ -188,7 +188,7 @@ pub struct Client {
 
 	chain: RwLock<Arc<BlockChain>>,
 	tracedb: RwLock<TraceDB<BlockChain>>,
-	engine: Arc<EthEngine>,
+	engine: Arc<dyn EthEngine>,
 
 	/// Client configuration
 	config: ClientConfig,
@@ -197,7 +197,7 @@ pub struct Client {
 	pruning: journaldb::Algorithm,
 
 	/// Client uses this to store blocks, traces, etc.
-	db: RwLock<Arc<BlockChainDB>>,
+	db: RwLock<Arc<dyn BlockChainDB>>,
 
 	state_db: RwLock<StateDB>,
 
@@ -214,7 +214,7 @@ pub struct Client {
 	io_channel: RwLock<IoChannel<ClientIoMessage>>,
 
 	/// List of actors to be notified on certain chain events
-	notify: RwLock<Vec<Weak<ChainNotify>>>,
+	notify: RwLock<Vec<Weak<dyn ChainNotify>>>,
 
 	/// Queued transactions from IO
 	queue_transactions: IoChannelQueue,
@@ -236,12 +236,12 @@ pub struct Client {
 	history: u64,
 
 	/// An action to be done if a mode/spec_name change happens
-	on_user_defaults_change: Mutex<Option<Box<FnMut(Option<Mode>) + 'static + Send>>>,
+	on_user_defaults_change: Mutex<Option<Box<dyn FnMut(Option<Mode>) + 'static + Send>>>,
 
 	registrar_address: Option<Address>,
 
 	/// A closure to call when we want to restart the client
-	exit_handler: Mutex<Option<Box<Fn(String) + 'static + Send>>>,
+	exit_handler: Mutex<Option<Box<dyn Fn(String) + 'static + Send>>>,
 
 	importer: Importer,
 }
@@ -249,7 +249,7 @@ pub struct Client {
 impl Importer {
 	pub fn new(
 		config: &ClientConfig,
-		engine: Arc<EthEngine>,
+		engine: Arc<dyn EthEngine>,
 		message_channel: IoChannel<ClientIoMessage>,
 		miner: Arc<Miner>,
 	) -> Result<Importer, ::error::Error> {
@@ -454,14 +454,14 @@ impl Importer {
 	///
 	/// The block is guaranteed to be the next best blocks in the
 	/// first block sequence. Does no sealing or transaction validation.
-	fn import_old_block(&self, unverified: Unverified, receipts_bytes: &[u8], db: &KeyValueDB, chain: &BlockChain) -> EthcoreResult<()> {
+	fn import_old_block(&self, unverified: Unverified, receipts_bytes: &[u8], db: &dyn KeyValueDB, chain: &BlockChain) -> EthcoreResult<()> {
 		let receipts = ::rlp::decode_list(receipts_bytes);
 		let _import_lock = self.import_lock.lock();
 
 		{
 			trace_time!("import_old_block");
 			// verify the block, passing the chain for updating the epoch verifier.
-			let mut rng = OsRng::new()?;
+			let mut rng = OsRng::new().map_err(|e| format!("{}", e))?;
 			self.ancient_verifier.verify(&mut rng, &unverified.header, &chain)?;
 
 			// Commit results
@@ -707,7 +707,7 @@ impl Client {
 	pub fn new(
 		config: ClientConfig,
 		spec: &Spec,
-		db: Arc<BlockChainDB>,
+		db: Arc<dyn BlockChainDB>,
 		miner: Arc<Miner>,
 		message_channel: IoChannel<ClientIoMessage>,
 	) -> Result<Arc<Client>, ::error::Error> {
@@ -852,7 +852,7 @@ impl Client {
 	}
 
 	/// Adds an actor to be notified on certain events
-	pub fn add_notify(&self, target: Arc<ChainNotify>) {
+	pub fn add_notify(&self, target: Arc<dyn ChainNotify>) {
 		self.notify.write().push(Arc::downgrade(&target));
 	}
 
@@ -865,11 +865,11 @@ impl Client {
 	}
 
 	/// Returns engine reference.
-	pub fn engine(&self) -> &EthEngine {
+	pub fn engine(&self) -> &dyn EthEngine {
 		&*self.engine
 	}
 
-	fn notify<F>(&self, f: F) where F: Fn(&ChainNotify) {
+	fn notify<F>(&self, f: F) where F: Fn(&dyn ChainNotify) {
 		for np in &*self.notify.read() {
 			if let Some(n) = np.upgrade() {
 				f(&*n);
@@ -916,12 +916,12 @@ impl Client {
 			let hashes = self.last_hashes.read();
 			if hashes.front().map_or(false, |h| h == parent_hash) {
 				let mut res = Vec::from(hashes.clone());
-				res.resize(256, H256::default());
+				res.resize(256, H256::zero());
 				return Arc::new(res);
 			}
 		}
 		let mut last_hashes = LastHashes::new();
-		last_hashes.resize(256, H256::default());
+		last_hashes.resize(256, H256::zero());
 		last_hashes[0] = parent_hash.clone();
 		let chain = self.chain.read();
 		for i in 0..255 {
@@ -1079,7 +1079,7 @@ impl Client {
 	}
 
 	/// Get a copy of the best block's state.
-	pub fn state(&self) -> Box<StateInfo> {
+	pub fn state(&self) -> Box<dyn StateInfo> {
 		Box::new(self.latest_state()) as Box<_>
 	}
 
@@ -1231,7 +1231,7 @@ impl Client {
 	// transaction for calling contracts from services like engine.
 	// from the null sender, with 50M gas.
 	fn contract_call_tx(&self, block_id: BlockId, address: Address, data: Bytes) -> SignedTransaction {
-		let from = Address::default();
+		let from = Address::zero();
 		transaction::Transaction {
 			nonce: self.nonce(&from, block_id).unwrap_or_else(|| self.engine.account_start_nonce(0)),
 			action: Action::Call(address),
@@ -1349,8 +1349,8 @@ impl BlockChainReset for Client {
 			best_block_hash = current_header.parent_hash();
 
 			let (number, hash) = (current_header.number(), current_header.hash());
-			batch.delete(::db::COL_HEADERS, &hash);
-			batch.delete(::db::COL_BODIES, &hash);
+			batch.delete(::db::COL_HEADERS, hash.as_bytes());
+			batch.delete(::db::COL_BODIES, hash.as_bytes());
 			Writable::delete::<BlockDetails, H264>
 				(&mut batch, ::db::COL_EXTRA, &hash);
 			Writable::delete::<H256, BlockNumberKey>
@@ -1383,7 +1383,7 @@ impl BlockChainReset for Client {
 			&best_block_details
 		);
 		// update the new best block hash
-		batch.put(::db::COL_EXTRA, b"best", &best_block_hash);
+		batch.put(::db::COL_EXTRA, b"best", best_block_hash.as_bytes());
 
 		self.db.read()
 			.key_value()
@@ -1656,7 +1656,7 @@ impl Call for Client {
 }
 
 impl EngineInfo for Client {
-	fn engine(&self) -> &EthEngine {
+	fn engine(&self) -> &dyn EthEngine {
 		Client::engine(self)
 	}
 }
@@ -1676,7 +1676,7 @@ impl BlockChainClient for Client {
 		Ok(self.replay_block_transactions(block, analytics)?.nth(address.index).expect(PROOF).1)
 	}
 
-	fn replay_block_transactions(&self, block: BlockId, analytics: CallAnalytics) -> Result<Box<Iterator<Item = (H256, Executed)>>, CallError> {
+	fn replay_block_transactions(&self, block: BlockId, analytics: CallAnalytics) -> Result<Box<dyn Iterator<Item = (H256, Executed)>>, CallError> {
 		let mut env_info = self.env_info(block).ok_or(CallError::StatePruned)?;
 		let body = self.block_body(block).ok_or(CallError::StatePruned)?;
 		let mut state = self.state_at_beginning(block).ok_or(CallError::StatePruned)?;
@@ -1830,7 +1830,7 @@ impl BlockChainClient for Client {
 		};
 
 		if let Some(after) = after {
-			if let Err(e) = iter.seek(after) {
+			if let Err(e) = iter.seek(after.as_bytes()) {
 				trace!(target: "fatdb", "list_accounts: Couldn't seek the DB: {:?}", e);
 			} else {
 				// Position the iterator after the `after` element
@@ -1878,7 +1878,7 @@ impl BlockChainClient for Client {
 		};
 
 		if let Some(after) = after {
-			if let Err(e) = iter.seek(after) {
+			if let Err(e) = iter.seek(after.as_bytes()) {
 				trace!(target: "fatdb", "list_storage: Couldn't seek the DB: {:?}", e);
 			} else {
 				// Position the iterator after the `after` element
@@ -2505,7 +2505,7 @@ impl super::traits::EngineClient for Client {
 		self.chain.read().epoch_transition_for(parent_hash)
 	}
 
-	fn as_full_client(&self) -> Option<&BlockChainClient> { Some(self) }
+	fn as_full_client(&self) -> Option<&dyn BlockChainClient> { Some(self) }
 
 	fn block_number(&self, id: BlockId) -> Option<BlockNumber> {
 		BlockChainClient::block_number(self, id)
@@ -2602,6 +2602,7 @@ fn transaction_receipt(
 
 #[cfg(test)]
 mod tests {
+	use ethereum_types::{H256, Address};
 
 	#[test]
 	fn should_not_cache_details_before_commit() {
@@ -2677,19 +2678,19 @@ mod tests {
 		use types::transaction::{Transaction, LocalizedTransaction, Action};
 
 		// given
-		let key = KeyPair::from_secret_slice(&keccak("test")).unwrap();
+		let key = KeyPair::from_secret_slice(keccak("test").as_bytes()).unwrap();
 		let secret = key.secret();
 		let machine = ::ethereum::new_frontier_test_machine();
 
 		let block_number = 1;
-		let block_hash = 5.into();
-		let state_root = 99.into();
+		let block_hash = H256::from_low_u64_be(5);
+		let state_root = H256::from_low_u64_be(99);
 		let gas_used = 10.into();
 		let raw_tx = Transaction {
 			nonce: 0.into(),
 			gas_price: 0.into(),
 			gas: 21000.into(),
-			action: Action::Call(10.into()),
+			action: Action::Call(Address::from_low_u64_be(10)),
 			value: 0.into(),
 			data: vec![],
 		};
@@ -2702,11 +2703,11 @@ mod tests {
 			cached_sender: Some(tx1.sender()),
 		};
 		let logs = vec![LogEntry {
-			address: 5.into(),
+			address: Address::from_low_u64_be(5),
 			topics: vec![],
 			data: vec![],
 		}, LogEntry {
-			address: 15.into(),
+			address: Address::from_low_u64_be(15),
 			topics: vec![],
 			data: vec![],
 		}];
