@@ -36,8 +36,9 @@ use types::header::Header;
 use parking_lot::RwLock;
 
 use call_contract::CallContract;
-use client::{TransactionId, BlockInfo, Nonce};
-use engines::EthEngine;
+use client::{TransactionId, Nonce};
+use client::BlockInfo;
+use engines::Engine;
 use miner;
 use transaction_ext::Transaction;
 
@@ -72,7 +73,7 @@ impl NonceCache {
 pub struct PoolClient<'a, C: 'a> {
 	chain: &'a C,
 	cached_nonces: CachedNonceClient<'a, C>,
-	engine: &'a dyn EthEngine,
+	engine: &'a dyn Engine,
 	accounts: &'a dyn LocalAccounts,
 	best_block_header: Header,
 	service_transaction_checker: Option<&'a ServiceTransactionChecker>,
@@ -98,7 +99,7 @@ impl<'a, C: 'a> PoolClient<'a, C> where
 	pub fn new(
 		chain: &'a C,
 		cache: &'a NonceCache,
-		engine: &'a dyn EthEngine,
+		engine: &'a dyn Engine,
 		accounts: &'a dyn LocalAccounts,
 		service_transaction_checker: Option<&'a ServiceTransactionChecker>,
 	) -> Self {
@@ -136,7 +137,7 @@ impl<'a, C: 'a> pool::client::Client for PoolClient<'a, C> where
 
 	fn verify_transaction(&self, tx: UnverifiedTransaction)-> Result<SignedTransaction, transaction::Error> {
 		self.engine.verify_transaction_basic(&tx, &self.best_block_header)?;
-		let tx = self.engine.verify_transaction_unordered(tx, &self.best_block_header)?;
+		let tx = tx.verify_unordered()?;
 
 		self.verify_signed(&tx)?;
 

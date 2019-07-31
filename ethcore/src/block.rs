@@ -22,13 +22,13 @@
 //! and can be appended to with transactions and uncles.
 //!
 //! When ready, `OpenBlock` can be closed and turned into a `ClosedBlock`. A `ClosedBlock` can
-//! be reopend again by a miner under certain circumstances. On block close, state commit is
+//! be re-opened again by a miner under certain circumstances. On block close, state commit is
 //! performed.
 //!
 //! `LockedBlock` is a version of a `ClosedBlock` that cannot be reopened. It can be sealed
 //! using an engine.
 //!
-//! `ExecutedBlock` is an underlaying data structure used by all structs above to store block
+//! `ExecutedBlock` is an underlying data structure used by all structs above to store block
 //! related info.
 
 use std::{cmp, ops};
@@ -38,23 +38,26 @@ use std::sync::Arc;
 use bytes::Bytes;
 use ethereum_types::{H256, U256, Address, Bloom};
 
-use engines::EthEngine;
-use error::{Error, BlockError};
-use factory::Factories;
+use engines::Engine;
+use trie_vm_factories::Factories;
 use state_db::StateDB;
-use state::State;
 use storage_writer;
+use account_state::State;
 use trace::Tracing;
 use triehash::ordered_trie_root;
 use unexpected::{Mismatch, OutOfBounds};
-use verification::PreverifiedBlock;
 use vm::{EnvInfo, LastHashes};
 
 use hash::keccak;
 use rlp::{RlpStream, Encodable, encode_list};
-use types::transaction::{SignedTransaction, Error as TransactionError};
-use types::header::{Header, ExtendedHeader};
-use types::receipt::{Receipt, TransactionOutcome};
+use types::{
+	block::PreverifiedBlock,
+	errors::{EthcoreError as Error, BlockError},
+	transaction::{SignedTransaction, Error as TransactionError},
+	header::Header,
+	receipt::{Receipt, TransactionOutcome},
+};
+use executive_state::ExecutiveState;
 
 /// Block that is ready for transactions to be added.
 ///
@@ -62,7 +65,8 @@ use types::receipt::{Receipt, TransactionOutcome};
 /// maintain the system `state()`. We also archive execution receipts in preparation for later block creation.
 pub struct OpenBlock<'x> {
 	block: ExecutedBlock,
-	engine: &'x dyn EthEngine,
+	engine: &'x dyn Engine,
+	parent: Header,
 }
 
 /// Just like `OpenBlock`, except that we've applied `Engine::on_close_block`, finished up the non-seal header fields,
@@ -73,6 +77,7 @@ pub struct OpenBlock<'x> {
 pub struct ClosedBlock {
 	block: ExecutedBlock,
 	unclosed_state: State<StateDB>,
+	parent: Header,
 }
 
 /// Just like `ClosedBlock` except that we can't reopen it and it's faster.
@@ -103,7 +108,7 @@ pub struct ExecutedBlock {
 	pub receipts: Vec<Receipt>,
 	/// Hashes of already executed transactions.
 	pub transactions_set: HashSet<H256>,
-	/// Underlaying state.
+	/// Underlying state.
 	pub state: State<StateDB>,
 	/// Transaction traces.
 	pub traces: Tracing,
@@ -124,7 +129,7 @@ impl ExecutedBlock {
 			uncles: Default::default(),
 			receipts: Default::default(),
 			transactions_set: Default::default(),
-			state: state,
+			state,
 			traces: if tracing {
 				Tracing::enabled()
 			} else {
@@ -132,7 +137,7 @@ impl ExecutedBlock {
 			},
 			storage_writer: storage_writer,
 			header_hash: header_hash,
-			last_hashes: last_hashes,
+			last_hashes,
 		}
 	}
 
@@ -169,8 +174,8 @@ pub trait Drain {
 
 impl<'x> OpenBlock<'x> {
 	/// Create a new `OpenBlock` ready for transaction pushing.
-	pub fn new<'a, I: IntoIterator<Item = ExtendedHeader>>(
-		engine: &'x dyn EthEngine,
+	pub fn new<'a>(
+		engine: &'x dyn Engine,
 		factories: Factories,
 		tracing: bool,
 		storage_writer: Box<storage_writer::StorageWriter>,
@@ -182,14 +187,10 @@ impl<'x> OpenBlock<'x> {
 		gas_range_target: (U256, U256),
 		extra_data: Bytes,
 		is_epoch_begin: bool,
-		ancestry: I,
 	) -> Result<Self, Error> {
 		let number = parent.number() + 1;
 		let state = State::from_existing(db, parent.state_root().clone(), engine.account_start_nonce(number), factories)?;
-		let mut r = OpenBlock {
-			block: ExecutedBlock::new(state, last_hashes, tracing, storage_writer, header_hash),
-			engine: engine,
-		};
+		let mut r = OpenBlock { block: ExecutedBlock::new(state, last_hashes, tracing, storage_writer, header_hash), engine, parent: parent.clone()};
 
 		r.block.header.set_parent_hash(parent.hash());
 		r.block.header.set_number(number);
@@ -204,7 +205,7 @@ impl<'x> OpenBlock<'x> {
 		engine.populate_from_parent(&mut r.block.header, parent);
 
 		engine.machine().on_new_block(&mut r.block)?;
-		engine.on_new_block(&mut r.block, is_epoch_begin, &mut ancestry.into_iter())?;
+		engine.on_new_block(&mut r.block, is_epoch_begin)?;
 
 		Ok(r)
 	}
@@ -306,19 +307,20 @@ impl<'x> OpenBlock<'x> {
 	/// Turn this into a `ClosedBlock`.
 	pub fn close(self) -> Result<ClosedBlock, Error> {
 		let unclosed_state = self.block.state.clone();
+		let parent = self.parent.clone();
 		let locked = self.close_and_lock()?;
 
 		Ok(ClosedBlock {
 			block: locked.block,
 			unclosed_state,
+			parent,
 		})
 	}
 
 	/// Turn this into a `LockedBlock`.
 	pub fn close_and_lock(self) -> Result<LockedBlock, Error> {
 		let mut s = self;
-
-		s.engine.on_close_block(&mut s.block)?;
+		s.engine.on_close_block(&mut s.block, &s.parent)?;
 		if s.block.storage_writer.enabled() {
 			s.block.state.write_watched_state(s.block.header_hash, s.block.header.number(), s.block.storage_writer.clone())?;
 		}
@@ -386,14 +388,12 @@ impl ClosedBlock {
 	}
 
 	/// Given an engine reference, reopen the `ClosedBlock` into an `OpenBlock`.
-	pub fn reopen(self, engine: &dyn EthEngine) -> OpenBlock {
+	pub fn reopen(self, engine: &dyn Engine) -> OpenBlock {
 		// revert rewards (i.e. set state back at last transaction's state).
 		let mut block = self.block;
 		block.state = self.unclosed_state;
-		OpenBlock {
-			block: block,
-			engine: engine,
-		}
+		let parent = self.parent;
+		OpenBlock { block, engine, parent }
 	}
 }
 
@@ -416,7 +416,7 @@ impl LockedBlock {
 	/// Provide a valid seal in order to turn this into a `SealedBlock`.
 	///
 	/// NOTE: This does not check the validity of `seal` with the engine.
-	pub fn seal(self, engine: &dyn EthEngine, seal: Vec<Bytes>) -> Result<SealedBlock, Error> {
+	pub fn seal(self, engine: &dyn Engine, seal: Vec<Bytes>) -> Result<SealedBlock, Error> {
 		let expected_seal_fields = engine.seal_fields(&self.header);
 		let mut s = self;
 		if seal.len() != expected_seal_fields {
@@ -441,7 +441,7 @@ impl LockedBlock {
 	/// TODO(https://github.com/paritytech/parity-ethereum/issues/10407): This is currently only used in POW chain call paths, we should really merge it with seal() above.
 	pub fn try_seal(
 		self,
-		engine: &dyn EthEngine,
+		engine: &dyn Engine,
 		seal: Vec<Bytes>,
 	) -> Result<SealedBlock, Error> {
 		let mut s = self;
@@ -484,7 +484,7 @@ pub(crate) fn enact(
 	header: Header,
 	transactions: Vec<SignedTransaction>,
 	uncles: Vec<Header>,
-	engine: &dyn EthEngine,
+	engine: &dyn Engine,
 	tracing: bool,
 	storage_writer: Box<storage_writer::StorageWriter>,
 	db: StateDB,
@@ -492,7 +492,6 @@ pub(crate) fn enact(
 	last_hashes: Arc<LastHashes>,
 	factories: Factories,
 	is_epoch_begin: bool,
-	ancestry: &mut dyn Iterator<Item=ExtendedHeader>,
 ) -> Result<LockedBlock, Error> {
 	// For trace log
 	let trace_state = if log_enabled!(target: "enact", ::log::Level::Trace) {
@@ -517,7 +516,6 @@ pub(crate) fn enact(
 		(3141562.into(), 31415620.into()),
 		vec![],
 		is_epoch_begin,
-		ancestry,
 	)?;
 
 	if let Some(ref s) = trace_state {
@@ -538,10 +536,10 @@ pub(crate) fn enact(
 	b.close_and_lock()
 }
 
-/// Enact the block given by `block_bytes` using `engine` on the database `db` with given `parent` block header
+/// Enact the block given by `block_bytes` using `engine` on the database `db` with the given `parent` block header
 pub fn enact_verified(
 	block: PreverifiedBlock,
-	engine: &dyn EthEngine,
+	engine: &dyn Engine,
 	tracing: bool,
 	storage_writer: Box<storage_writer::StorageWriter>,
 	db: StateDB,
@@ -549,7 +547,6 @@ pub fn enact_verified(
 	last_hashes: Arc<LastHashes>,
 	factories: Factories,
 	is_epoch_begin: bool,
-	ancestry: &mut dyn Iterator<Item=ExtendedHeader>,
 ) -> Result<LockedBlock, Error> {
 
 	enact(
@@ -564,7 +561,6 @@ pub fn enact_verified(
 		last_hashes,
 		factories,
 		is_epoch_begin,
-		ancestry,
 	)
 }
 
@@ -572,24 +568,25 @@ pub fn enact_verified(
 mod tests {
 	use test_helpers::get_temp_state_db;
 	use super::*;
-	use engines::EthEngine;
+	use engines::Engine;
 	use vm::LastHashes;
-	use error::Error;
-	use factory::Factories;
+	use trie_vm_factories::Factories;
 	use state_db::StateDB;
 	use ethereum_types::Address;
 	use std::sync::Arc;
 	use verification::queue::kind::blocks::Unverified;
 	use types::transaction::SignedTransaction;
-	use types::header::Header;
-	use types::view;
-	use types::views::BlockView;
+	use types::{
+		header::Header, view, views::BlockView,
+		errors::EthcoreError as Error,
+	};
+	use hash_db::EMPTY_PREFIX;
 	use storage_writer;
 
 	/// Enact the block given by `block_bytes` using `engine` on the database `db` with given `parent` block header
 	fn enact_bytes(
 		block_bytes: Vec<u8>,
-		engine: &dyn EthEngine,
+		engine: &dyn Engine,
 		tracing: bool,
 		storage_writer: Box<storage_writer::StorageWriter>,
 		header_hash: H256,
@@ -630,7 +627,6 @@ mod tests {
 			(3141562.into(), 31415620.into()),
 			vec![],
 			false,
-			None,
 		)?;
 
 		b.populate_from(&header);
@@ -646,7 +642,7 @@ mod tests {
 	/// Enact the block given by `block_bytes` using `engine` on the database `db` with given `parent` block header. Seal the block aferwards
 	fn enact_and_seal(
 		block_bytes: Vec<u8>,
-		engine: &dyn EthEngine,
+		engine: &dyn Engine,
 		tracing: bool,
 		storage_writer: Box<storage_writer::StorageWriter>,
 		header_hash: H256,
@@ -667,7 +663,7 @@ mod tests {
 		let genesis_header = spec.genesis_header();
 		let db = spec.ensure_db_good(get_temp_state_db(), &Default::default()).unwrap();
 		let last_hashes = Arc::new(vec![genesis_header.hash()]);
-		let b = OpenBlock::new(&*spec.engine, Default::default(), false, storage_writer::new(Default::default()), H256::default(), db, &genesis_header, last_hashes, Address::zero(), (3141562.into(), 31415620.into()), vec![], false, None).unwrap();
+		let b = OpenBlock::new(&*spec.engine, Default::default(), false, storage_writer::new(Default::default()), H256::default(), db, &genesis_header, last_hashes, Address::zero(), (3141562.into(), 31415620.into()), vec![], false).unwrap();
 		let b = b.close_and_lock().unwrap();
 		let _ = b.seal(&*spec.engine, vec![]);
 	}
@@ -681,7 +677,7 @@ mod tests {
 
 		let db = spec.ensure_db_good(get_temp_state_db(), &Default::default()).unwrap();
 		let last_hashes = Arc::new(vec![genesis_header.hash()]);
-		let b = OpenBlock::new(&*spec.engine, Default::default(), false, storage_writer::new(Default::default()), H256::default(), db, &genesis_header, last_hashes.clone(), Address::zero(), (3141562.into(), 31415620.into()), vec![], false, None).unwrap()
+		let b = OpenBlock::new(engine, Default::default(), false, storage_writer::new(Default::default()), H256::default(), db, &genesis_header, last_hashes.clone(), Address::zero(), (3141562.into(), 31415620.into()), vec![], false).unwrap()
 			.close_and_lock().unwrap().seal(engine, vec![]).unwrap();
 		let orig_bytes = b.rlp_bytes();
 		let orig_db = b.drain().state.drop().1;
@@ -693,7 +689,8 @@ mod tests {
 
 		let db = e.drain().state.drop().1;
 		assert_eq!(orig_db.journal_db().keys(), db.journal_db().keys());
-		assert!(orig_db.journal_db().keys().iter().filter(|k| orig_db.journal_db().get(k.0) != db.journal_db().get(k.0)).next() == None);
+		assert!(orig_db.journal_db().keys().iter().filter(|k| orig_db.journal_db().get(k.0, EMPTY_PREFIX)
+			!= db.journal_db().get(k.0, EMPTY_PREFIX)).next() == None);
 	}
 
 	#[test]
@@ -705,7 +702,7 @@ mod tests {
 
 		let db = spec.ensure_db_good(get_temp_state_db(), &Default::default()).unwrap();
 		let last_hashes = Arc::new(vec![genesis_header.hash()]);
-		let mut open_block = OpenBlock::new(engine, Default::default(), false, storage_writer::new(Default::default()), H256::default(), db, &genesis_header, last_hashes.clone(), Address::zero(), (3141562.into(), 31415620.into()), vec![], false, None).unwrap();
+		let mut open_block = OpenBlock::new(engine, Default::default(), false, storage_writer::new(Default::default()), H256::default(), db, &genesis_header, last_hashes.clone(), Address::zero(), (3141562.into(), 31415620.into()), vec![], false).unwrap();
 		let mut uncle1_header = Header::new();
 		uncle1_header.set_extra_data(b"uncle1".to_vec());
 		let mut uncle2_header = Header::new();
@@ -727,6 +724,7 @@ mod tests {
 
 		let db = e.drain().state.drop().1;
 		assert_eq!(orig_db.journal_db().keys(), db.journal_db().keys());
-		assert!(orig_db.journal_db().keys().iter().filter(|k| orig_db.journal_db().get(k.0) != db.journal_db().get(k.0)).next() == None);
+		assert!(orig_db.journal_db().keys().iter().filter(|k| orig_db.journal_db().get(k.0, EMPTY_PREFIX)
+			!= db.journal_db().get(k.0, EMPTY_PREFIX)).next() == None);
 	}
 }

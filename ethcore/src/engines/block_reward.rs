@@ -17,16 +17,17 @@
 //! A module with types for declaring block rewards and a client interface for interacting with a
 //! block reward contract.
 
-use ethabi;
-use ethabi::ParamType;
-use ethereum_types::{H160, Address, U256};
+use ethabi::FunctionOutputDecoder;
+use ethereum_types::{Address, U256};
 
 use std::sync::Arc;
 use hash::keccak;
-use error::Error;
 use machine::Machine;
 use trace;
-use types::BlockNumber;
+use types::{
+	BlockNumber,
+	errors::{EngineError, EthcoreError as Error},
+};
 use super::{SystemOrCodeCall, SystemOrCodeCallKind};
 use trace::{Tracer, ExecutiveTracer, Tracing};
 use block::ExecutedBlock;
@@ -110,54 +111,37 @@ impl BlockRewardContract {
 	/// `machine.execute_as_system`).
 	pub fn reward(
 		&self,
-		beneficiaries: &[(Address, RewardKind)],
+		beneficiaries: Vec<(Address, RewardKind)>,
 		caller: &mut SystemOrCodeCall,
 	) -> Result<Vec<(Address, U256)>, Error> {
-		let input = block_reward_contract::functions::reward::encode_input(
-			beneficiaries.iter().map(|&(address, _)| H160::from(address)),
-			beneficiaries.iter().map(|&(_, ref reward_kind)| u16::from(*reward_kind)),
-		);
+		let (addresses, rewards): (Vec<_>, Vec<_>) = beneficiaries.into_iter().unzip();
+		let (input, decoder) = block_reward_contract::functions::reward::call(addresses, rewards.into_iter().map(u16::from));
 
 		let output = caller(self.kind.clone(), input)
 			.map_err(Into::into)
-			.map_err(::engines::EngineError::FailedSystemCall)?;
+			.map_err(EngineError::FailedSystemCall)?;
 
-		// since this is a non-constant call we can't use ethabi's function output
-		// deserialization, sadness ensues.
-		let types = &[
-			ParamType::Array(Box::new(ParamType::Address)),
-			ParamType::Array(Box::new(ParamType::Uint(256))),
-		];
-
-		let tokens = ethabi::decode(types, &output)
+		let (addresses, rewards) = decoder.decode(&output)
 			.map_err(|err| err.to_string())
-			.map_err(::engines::EngineError::FailedSystemCall)?;
-
-		assert!(tokens.len() == 2);
-
-		let addresses = tokens[0].clone().to_array().expect("type checked by ethabi::decode; qed");
-		let rewards = tokens[1].clone().to_array().expect("type checked by ethabi::decode; qed");
+			.map_err(EngineError::FailedSystemCall)?;
 
 		if addresses.len() != rewards.len() {
-			return Err(::engines::EngineError::FailedSystemCall(
+			return Err(EngineError::FailedSystemCall(
 				"invalid data returned by reward contract: both arrays must have the same size".into()
 			).into());
 		}
 
-		let addresses = addresses.into_iter().map(|t| t.to_address().expect("type checked by ethabi::decode; qed"));
-		let rewards = rewards.into_iter().map(|t| t.to_uint().expect("type checked by ethabi::decode; qed"));
-
-		Ok(addresses.zip(rewards).collect())
+		Ok(addresses.into_iter().zip(rewards.into_iter()).collect())
 	}
 }
 
 /// Applies the given block rewards, i.e. adds the given balance to each beneficiary' address.
 /// If tracing is enabled the operations are recorded.
-pub fn apply_block_rewards<M: Machine>(
+pub fn apply_block_rewards(
 	rewards: &[(Address, RewardKind, U256)],
 	block: &mut ExecutedBlock,
-	machine: &M,
-) -> Result<(), M::Error> {
+	machine: &Machine,
+) -> Result<(), Error> {
 	for &(ref author, _, ref block_reward) in rewards {
 		machine.add_balance(block, author, block_reward)?;
 	}
@@ -220,7 +204,7 @@ mod test {
 		};
 
 		// if no beneficiaries are given no rewards are attributed
-		assert!(block_reward_contract.reward(&vec![], &mut call).unwrap().is_empty());
+		assert!(block_reward_contract.reward(vec![], &mut call).unwrap().is_empty());
 
 		// the contract rewards (1000 + kind) for each benefactor
 		let beneficiaries = vec![
@@ -229,7 +213,7 @@ mod test {
 			(Address::from_str("0000000000000000000000000000000000000035").unwrap(), RewardKind::EmptyStep),
 		];
 
-		let rewards = block_reward_contract.reward(&beneficiaries, &mut call).unwrap();
+		let rewards = block_reward_contract.reward(beneficiaries, &mut call).unwrap();
 		let expected = vec![
 			(Address::from_str("0000000000000000000000000000000000000033").unwrap(), U256::from(1000)),
 			(Address::from_str("0000000000000000000000000000000000000034").unwrap(), U256::from(1000 + 101)),

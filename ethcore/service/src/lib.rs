@@ -15,6 +15,7 @@
 // along with Parity Ethereum.  If not, see <http://www.gnu.org/licenses/>.
 
 extern crate ansi_term;
+extern crate common_types;
 extern crate ethcore;
 extern crate ethcore_blockchain as blockchain;
 extern crate ethcore_io as io;
@@ -23,7 +24,6 @@ extern crate ethcore_sync as sync;
 extern crate ethereum_types;
 extern crate kvdb;
 
-extern crate derive_more;
 #[macro_use]
 extern crate log;
 #[macro_use]
@@ -34,12 +34,9 @@ extern crate ethcore_db;
 #[cfg(test)]
 extern crate tempdir;
 
-mod error;
 mod service;
-mod stop_guard;
 
 #[cfg(test)]
 extern crate kvdb_rocksdb;
 
-pub use error::Error;
 pub use service::{ClientService, PrivateTxService};

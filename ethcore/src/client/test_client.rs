@@ -36,10 +36,11 @@ use kvdb_memorydb;
 use parking_lot::RwLock;
 use rlp::{Rlp, RlpStream};
 use rustc_hex::FromHex;
-use types::transaction::{self, Transaction, LocalizedTransaction, SignedTransaction, Action};
+use types::transaction::{self, Transaction, LocalizedTransaction, SignedTransaction, Action, CallError};
 use types::BlockNumber;
 use types::basic_account::BasicAccount;
 use types::encoded;
+use types::errors::{EthcoreError as Error, EthcoreResult};
 use types::filter::Filter;
 use types::header::Header;
 use types::log_entry::LocalizedLogEntry;
@@ -52,21 +53,20 @@ use vm::Schedule;
 use block::{OpenBlock, SealedBlock, ClosedBlock};
 use call_contract::{CallContract, RegistryInfo};
 use client::{
-	Nonce, Balance, ChainInfo, BlockInfo, ReopenBlock, TransactionInfo,
+	Nonce, Balance, ChainInfo, ReopenBlock, TransactionInfo,
 	PrepareOpenBlock, BlockChainClient, BlockChainInfo, BlockStatus, BlockId, Mode,
 	TransactionId, UncleId, TraceId, TraceFilter, LastHashes, CallAnalytics,
 	ProvingBlockChainClient, ScheduleInfo, ImportSealedBlock, BroadcastProposalBlock, ImportBlock, StateOrBlock,
 	Call, StateClient, EngineInfo, AccountData, BlockChain, BlockProducer, SealedBlockImporter, IoClient,
 	BadBlocks
 };
-use engines::EthEngine;
-use error::{Error, EthcoreResult};
-use executed::CallError;
+use client::BlockInfo;
+use engines::Engine;
 use executive::Executed;
 use journaldb;
 use miner::{self, Miner, MinerService};
 use spec::Spec;
-use state::StateInfo;
+use account_state::state::StateInfo;
 use state_db::StateDB;
 use trace::LocalizedTrace;
 use verification::queue::QueueInfo as BlockQueueInfo;
@@ -420,7 +420,6 @@ impl PrepareOpenBlock for TestBlockChainClient {
 			gas_range_target,
 			extra_data,
 			false,
-			None,
 		)?;
 		// TODO [todr] Override timestamp for predictability
 		open_block.set_timestamp(*self.latest_block_timestamp.read());
@@ -590,7 +589,7 @@ impl ImportBlock for TestBlockChainClient {
 
 impl Call for TestBlockChainClient {
 	// State will not be used by test client anyway, since all methods that accept state are mocked
-	type State = ();
+	type State = TestState;
 
 	fn call(&self, _t: &SignedTransaction, _analytics: CallAnalytics, _state: &mut Self::State, _header: &Header) -> Result<Executed, CallError> {
 		self.execution_result.read().clone().unwrap()
@@ -609,28 +608,32 @@ impl Call for TestBlockChainClient {
 	}
 }
 
-impl StateInfo for () {
+/// NewType wrapper around `()` to impersonate `State` in trait impls. State will not be used by
+/// test client, since all methods that accept state are mocked.
+pub struct TestState;
+
+impl StateInfo for TestState {
 	fn nonce(&self, _address: &Address) -> ethtrie::Result<U256> { unimplemented!() }
 	fn balance(&self, _address: &Address) -> ethtrie::Result<U256> { unimplemented!() }
 	fn storage_at(&self, _address: &Address, _key: &H256) -> ethtrie::Result<H256> { unimplemented!() }
 	fn code(&self, _address: &Address) -> ethtrie::Result<Option<Arc<Bytes>>> { unimplemented!() }
 }
 
+
 impl StateClient for TestBlockChainClient {
-	// State will not be used by test client anyway, since all methods that accept state are mocked
-	type State = ();
+	type State = TestState;
 
 	fn latest_state(&self) -> Self::State {
-		()
+		TestState
 	}
 
 	fn state_at(&self, _id: BlockId) -> Option<Self::State> {
-		Some(())
+		Some(TestState)
 	}
 }
 
 impl EngineInfo for TestBlockChainClient {
-	fn engine(&self) -> &dyn EthEngine {
+	fn engine(&self) -> &dyn Engine {
 		unimplemented!()
 	}
 }
@@ -842,10 +845,6 @@ impl BlockChainClient for TestBlockChainClient {
 	}
 
 	fn clear_queue(&self) {
-	}
-
-	fn additional_params(&self) -> BTreeMap<String, String> {
-		Default::default()
 	}
 
 	fn filter_traces(&self, _filter: TraceFilter) -> Option<Vec<LocalizedTrace>> {

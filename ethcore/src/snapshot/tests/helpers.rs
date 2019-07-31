@@ -26,7 +26,7 @@ use account_db::AccountDBMut;
 use types::basic_account::BasicAccount;
 use blockchain::{BlockChain, BlockChainDB};
 use client::{Client, ChainInfo};
-use engines::EthEngine;
+use engines::Engine;
 use snapshot::{StateRebuilder};
 use snapshot::io::{SnapshotReader, PackedWriter, PackedReader};
 
@@ -41,6 +41,7 @@ use journaldb;
 use trie::{TrieMut, Trie};
 use ethtrie::{SecTrieDBMut, TrieDB, TrieDBMut};
 use self::trie_standardmap::{Alphabet, StandardMap, ValueMode};
+use types::errors::EthcoreError;
 
 // the proportion of accounts we will alter each tick.
 const ACCOUNT_CHURN: f32 = 0.01;
@@ -97,7 +98,7 @@ impl StateProducer {
 			let address_hash = H256(rng.gen());
 			let balance: usize = rng.gen();
 			let nonce: usize = rng.gen();
-			let acc = ::state::Account::new_basic(balance.into(), nonce.into()).rlp();
+			let acc = account_state::Account::new_basic(balance.into(), nonce.into()).rlp();
 			trie.insert(&address_hash[..], &acc).unwrap();
 		}
 	}
@@ -152,10 +153,10 @@ pub fn snap(client: &Client) -> (Box<dyn SnapshotReader>, TempDir) {
 /// write into the given database.
 pub fn restore(
 	db: Arc<dyn BlockChainDB>,
-	engine: &dyn EthEngine,
+	engine: &dyn Engine,
 	reader: &dyn SnapshotReader,
 	genesis: &[u8],
-) -> Result<(), ::error::Error> {
+) -> Result<(), EthcoreError> {
 	use std::sync::atomic::AtomicBool;
 
 	let flag = AtomicBool::new(true);
@@ -187,5 +188,5 @@ pub fn restore(
 
 	trace!(target: "snapshot", "finalizing");
 	state.finalize(manifest.block_number, manifest.block_hash)?;
-	secondary.finalize(engine)
+	secondary.finalize()
 }

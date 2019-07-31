@@ -19,8 +19,10 @@
 use std::time::{Instant, Duration};
 use ethereum_types::{H256, U256};
 use ethcore::client::{self, EvmTestClient, EvmTestError, TransactErr, TransactSuccess};
-use ethcore::{state, state_db, trace, spec, pod_state, TrieSpec};
+use ethcore::{spec, TrieSpec};
+use trace;
 use ethjson;
+use pod::PodState;
 use types::transaction;
 use vm::ActionParams;
 
@@ -52,7 +54,7 @@ pub struct Success<T> {
 	/// Traces
 	pub traces: Option<T>,
 	/// Optional end state dump
-	pub end_state: Option<pod_state::PodState>,
+	pub end_state: Option<PodState>,
 }
 
 /// Execution failed
@@ -69,7 +71,7 @@ pub struct Failure<T> {
 	/// Traces
 	pub traces: Option<T>,
 	/// Optional end state dump
-	pub end_state: Option<pod_state::PodState>,
+	pub end_state: Option<PodState>,
 }
 
 /// EVM Execution result
@@ -105,7 +107,7 @@ pub fn run_transaction<T: Informant>(
 	name: &str,
 	idx: usize,
 	spec: &ethjson::spec::ForkSpec,
-	pre_state: &pod_state::PodState,
+	pre_state: &PodState,
 	post_root: H256,
 	env_info: &client::EnvInfo,
 	transaction: transaction::SignedTransaction,
@@ -152,19 +154,15 @@ pub fn run_transaction<T: Informant>(
 	T::finish(result, &mut sink)
 }
 
-fn dump_state(state: &state::State<state_db::StateDB>) -> Option<pod_state::PodState> {
-	state.to_pod_full().ok()
-}
-
 /// Execute VM with given `ActionParams`
 pub fn run<'a, F, X>(
 	spec: &'a spec::Spec,
 	trie_spec: TrieSpec,
 	initial_gas: U256,
-	pre_state: &'a pod_state::PodState,
+	pre_state: &'a PodState,
 	run: F,
 ) -> RunResult<X> where
-	F: FnOnce(EvmTestClient) -> (Result<Vec<u8>, EvmTestError>, H256, Option<pod_state::PodState>, Option<U256>, Option<X>),
+	F: FnOnce(EvmTestClient) -> (Result<Vec<u8>, EvmTestError>, H256, Option<PodState>, Option<U256>, Option<X>),
 {
 	let do_dump = trie_spec == TrieSpec::Fat;
 
@@ -179,7 +177,7 @@ pub fn run<'a, F, X>(
 		})?;
 
 	if do_dump {
-		test_client.set_dump_state_fn(dump_state);
+		test_client.set_dump_state();
 	}
 
 	let start = Instant::now();
@@ -256,16 +254,16 @@ pub mod tests {
 
 		assert_eq!(
 			&String::from_utf8_lossy(&**res.lock().unwrap()),
-r#"{"depth":1,"gas":"0xffff","op":98,"opName":"PUSH3","pc":0,"stack":[],"storage":{}}
-{"depth":1,"gas":"0xfffc","op":96,"opName":"PUSH1","pc":4,"stack":["0xaaaaaa"],"storage":{}}
-{"depth":1,"gas":"0xfff9","op":96,"opName":"PUSH1","pc":6,"stack":["0xaaaaaa","0xaa"],"storage":{}}
-{"depth":1,"gas":"0xfff6","op":80,"opName":"POP","pc":8,"stack":["0xaaaaaa","0xaa","0xaa"],"storage":{}}
-{"depth":1,"gas":"0xfff4","op":96,"opName":"PUSH1","pc":9,"stack":["0xaaaaaa","0xaa"],"storage":{}}
-{"depth":1,"gas":"0xfff1","op":96,"opName":"PUSH1","pc":11,"stack":["0xaaaaaa","0xaa","0xaa"],"storage":{}}
-{"depth":1,"gas":"0xffee","op":96,"opName":"PUSH1","pc":13,"stack":["0xaaaaaa","0xaa","0xaa","0xaa"],"storage":{}}
-{"depth":1,"gas":"0xffeb","op":96,"opName":"PUSH1","pc":15,"stack":["0xaaaaaa","0xaa","0xaa","0xaa","0xaa"],"storage":{}}
-{"depth":1,"gas":"0xffe8","op":96,"opName":"PUSH1","pc":17,"stack":["0xaaaaaa","0xaa","0xaa","0xaa","0xaa","0xaa"],"storage":{}}
-{"depth":1,"gas":"0xffe5","op":96,"opName":"PUSH1","pc":19,"stack":["0xaaaaaa","0xaa","0xaa","0xaa","0xaa","0xaa","0xaa"],"storage":{}}
+r#"{"pc":0,"op":98,"opName":"PUSH3","gas":"0xffff","stack":[],"storage":{},"depth":1}
+{"pc":4,"op":96,"opName":"PUSH1","gas":"0xfffc","stack":["0xaaaaaa"],"storage":{},"depth":1}
+{"pc":6,"op":96,"opName":"PUSH1","gas":"0xfff9","stack":["0xaaaaaa","0xaa"],"storage":{},"depth":1}
+{"pc":8,"op":80,"opName":"POP","gas":"0xfff6","stack":["0xaaaaaa","0xaa","0xaa"],"storage":{},"depth":1}
+{"pc":9,"op":96,"opName":"PUSH1","gas":"0xfff4","stack":["0xaaaaaa","0xaa"],"storage":{},"depth":1}
+{"pc":11,"op":96,"opName":"PUSH1","gas":"0xfff1","stack":["0xaaaaaa","0xaa","0xaa"],"storage":{},"depth":1}
+{"pc":13,"op":96,"opName":"PUSH1","gas":"0xffee","stack":["0xaaaaaa","0xaa","0xaa","0xaa"],"storage":{},"depth":1}
+{"pc":15,"op":96,"opName":"PUSH1","gas":"0xffeb","stack":["0xaaaaaa","0xaa","0xaa","0xaa","0xaa"],"storage":{},"depth":1}
+{"pc":17,"op":96,"opName":"PUSH1","gas":"0xffe8","stack":["0xaaaaaa","0xaa","0xaa","0xaa","0xaa","0xaa"],"storage":{},"depth":1}
+{"pc":19,"op":96,"opName":"PUSH1","gas":"0xffe5","stack":["0xaaaaaa","0xaa","0xaa","0xaa","0xaa","0xaa","0xaa"],"storage":{},"depth":1}
 "#);
 	}
 }
