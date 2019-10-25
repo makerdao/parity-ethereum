@@ -66,7 +66,7 @@ pub struct LocalTransactionsList {
 	max_old: usize,
 	transactions: LinkedHashMap<H256, Status>,
 	pending: usize,
-	in_chain: Option<Box<Fn(&H256) -> bool + Send + Sync>>,
+	in_chain: Option<Box<dyn Fn(&H256) -> bool + Send + Sync>>,
 }
 
 impl fmt::Debug for LocalTransactionsList {
@@ -235,7 +235,7 @@ impl txpool::Listener<Transaction> for LocalTransactionsList {
 mod tests {
 	use super::*;
 	use ethereum_types::U256;
-	use ethkey::{Random, Generator};
+	use parity_crypto::publickey::{Random, Generator};
 	use types::transaction;
 	use txpool::Listener;
 

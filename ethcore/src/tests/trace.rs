@@ -16,32 +16,36 @@
 
 //! Client tests of tracing
 
-use ethkey::KeyPair;
+use parity_crypto::publickey::KeyPair;
 use hash::keccak;
 use block::*;
 use ethereum_types::{H256, U256, Address};
 use io::*;
-use spec::*;
-use client::*;
+use spec;
 use test_helpers::get_temp_state_db;
-use client::{BlockChainClient, Client, ClientConfig};
+use client::{Client, ClientConfig};
+use client_traits::{BlockChainClient, ImportBlock};
 use std::sync::Arc;
 use std::str::FromStr;
 use miner::Miner;
-use types::transaction::{Action, Transaction};
 use trace::{RewardType, LocalizedTrace};
 use trace::trace::Action::Reward;
 use test_helpers;
-use verification::queue::kind::blocks::Unverified;
-use types::header::Header;
-use types::view;
-use types::views::BlockView;
 use storage_writer;
+use types::{
+	ids::BlockId,
+	transaction::{Action, Transaction},
+	trace_filter::Filter as TraceFilter,
+	header::Header,
+	verification::Unverified,
+	view,
+	views::BlockView,
+};
 
 #[test]
 fn can_trace_block_and_uncle_reward() {
 	let db = test_helpers::new_db();
-	let spec = Spec::new_test_with_reward();
+	let spec = spec::new_test_with_reward();
 	let engine = &*spec.engine;
 
 	// Create client
@@ -184,7 +188,6 @@ fn can_trace_block_and_uncle_reward() {
 
 	block.drain();
 	client.flush_queue();
-	client.import_verified_blocks();
 
 	// Test0. Check overall filter
 	let filter = TraceFilter {

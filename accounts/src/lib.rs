@@ -28,7 +28,8 @@ use self::stores::AddressBook;
 use std::collections::HashMap;
 use std::time::{Instant, Duration};
 
-use ethkey::{Address, Message, Public, Secret, Password, Random, Generator};
+use ethkey::Password;
+use parity_crypto::publickey::{Address, Message, Public, Secret, Random, Generator, Signature};
 use ethstore::accounts_dir::MemoryDirectory;
 use ethstore::{
 	SimpleSecretStore, SecretStore, EthStore, EthMultiStore,
@@ -37,7 +38,6 @@ use ethstore::{
 use log::warn;
 use parking_lot::RwLock;
 
-pub use ethkey::Signature;
 pub use ethstore::{Derivation, IndexDerivation, KeyFile, Error};
 
 pub use self::account_data::AccountMeta;
@@ -64,7 +64,7 @@ pub struct AccountProvider {
 	/// Address book.
 	address_book: RwLock<AddressBook>,
 	/// Accounts on disk
-	sstore: Box<SecretStore>,
+	sstore: Box<dyn SecretStore>,
 	/// Accounts unlocked with rolling tokens
 	transient_sstore: EthMultiStore,
 	/// When unlocking account permanently we additionally keep a raw secret in memory
@@ -80,7 +80,7 @@ fn transient_sstore() -> EthMultiStore {
 
 impl AccountProvider {
 	/// Creates new account provider.
-	pub fn new(sstore: Box<SecretStore>, settings: AccountProviderSettings) -> Self {
+	pub fn new(sstore: Box<dyn SecretStore>, settings: AccountProviderSettings) -> Self {
 		if let Ok(accounts) = sstore.accounts() {
 			for account in accounts.into_iter().filter(|a| settings.blacklisted_accounts.contains(&a.address)) {
 				warn!("Local Account {} has a blacklisted (known to be weak) address and will be ignored",
@@ -503,7 +503,7 @@ impl AccountProvider {
 mod tests {
 	use super::{AccountProvider, Unlock};
 	use std::time::{Duration, Instant};
-	use ethkey::{Generator, Random, Address};
+	use parity_crypto::publickey::{Generator, Random, Address};
 	use ethstore::{StoreAccountRef, Derivation};
 	use ethereum_types::H256;
 

@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 
 [dependencies]
-csv = "1.0.5"
+csv = "1.1.1"
 dir = { path = "../../util/dir" }
-ethereum-types = "0.6.0"
+ethereum-types = "0.8.0"
 tempdir = "0.3"
 vm = { path = "../../ethcore/vm" }

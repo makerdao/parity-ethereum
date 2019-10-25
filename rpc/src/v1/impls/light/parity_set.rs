@@ -34,14 +34,14 @@ use v1::types::{Bytes, ReleaseInfo, Transaction};
 
 /// Parity-specific rpc interface for operations altering the settings.
 pub struct ParitySetClient<F> {
-	client: Arc<LightChainClient>,
-	net: Arc<ManageNetwork>,
+	client: Arc<dyn LightChainClient>,
+	net: Arc<dyn ManageNetwork>,
 	fetch: F,
 }
 
 impl<F: Fetch> ParitySetClient<F> {
 	/// Creates new `ParitySetClient` with given `Fetch`.
-	pub fn new(client: Arc<LightChainClient>, net: Arc<ManageNetwork>, fetch: F) -> Self {
+	pub fn new(client: Arc<dyn LightChainClient>, net: Arc<dyn ManageNetwork>, fetch: F) -> Self {
 		ParitySetClient {
 			client,
 			net,
@@ -72,6 +72,10 @@ impl<F: Fetch> ParitySet for ParitySetClient<F> {
 	}
 
 	fn set_engine_signer_secret(&self, _secret: H256) -> Result<bool> {
+		Err(errors::light_unimplemented(None))
+	}
+
+	fn clear_engine_signer(&self) -> Result<bool> {
 		Err(errors::light_unimplemented(None))
 	}
 

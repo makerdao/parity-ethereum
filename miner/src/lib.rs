@@ -33,14 +33,13 @@ extern crate parity_runtime;
 extern crate parking_lot;
 #[cfg(feature = "price-info")]
 extern crate price_info;
+extern crate registrar;
 extern crate rlp;
 extern crate transaction_pool as txpool;
 extern crate serde;
 
 #[macro_use]
 extern crate ethabi_contract;
-#[macro_use]
-extern crate ethabi_derive;
 #[macro_use]
 extern crate log;
 #[macro_use]
@@ -51,7 +50,7 @@ extern crate trace_time;
 #[cfg(test)]
 extern crate rustc_hex;
 #[cfg(test)]
-extern crate ethkey;
+extern crate parity_crypto;
 #[cfg(test)]
 extern crate env_logger;
 

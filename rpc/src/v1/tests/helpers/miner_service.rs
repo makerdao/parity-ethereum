@@ -20,15 +20,16 @@ use std::sync::Arc;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use bytes::Bytes;
+use client_traits::{Nonce, StateClient};
+use engine::{Engine, signer::EngineSigner};
 use ethcore::block::SealedBlock;
-use ethcore::client::{Nonce, PrepareOpenBlock, StateClient, EngineInfo, TestState};
-use ethcore::engines::{Engine, signer::EngineSigner};
+use ethcore::client::{PrepareOpenBlock, EngineInfo};
 use ethcore::miner::{self, MinerService, AuthoringParams, FilterOptions};
+use ethcore::test_helpers::TestState;
 use ethereum_types::{H256, U256, Address};
 use miner::pool::local_transactions::Status as LocalTransactionStatus;
 use miner::pool::{verifier, VerifiedTransaction, QueueStatus};
 use parking_lot::{RwLock, Mutex};
-use types::transaction::{self, UnverifiedTransaction, SignedTransaction, PendingTransaction};
 use txpool;
 use types::{
 	BlockNumber,
@@ -37,6 +38,7 @@ use types::{
 	errors::EthcoreError as Error,
 	ids::BlockId,
 	receipt::RichReceipt,
+	transaction::{self, UnverifiedTransaction, SignedTransaction, PendingTransaction},
 };
 
 /// Test miner service.
@@ -54,7 +56,7 @@ pub struct TestMinerService {
 	/// Minimum gas price
 	pub min_gas_price: RwLock<Option<U256>>,
 	/// Signer (if any)
-	pub signer: RwLock<Option<Box<EngineSigner>>>,
+	pub signer: RwLock<Option<Box<dyn EngineSigner>>>,
 
 	authoring_params: RwLock<AuthoringParams>,
 }
@@ -91,8 +93,8 @@ impl StateClient for TestMinerService {
 	// State will not be used by test client anyway, since all methods that accept state are mocked
 	type State = TestState;
 
-	fn latest_state(&self) -> Self::State {
-		TestState
+	fn latest_state_and_header(&self) -> (Self::State, Header) {
+		(TestState, Header::default())
 	}
 
 	fn state_at(&self, _id: BlockId) -> Option<Self::State> {
@@ -101,7 +103,7 @@ impl StateClient for TestMinerService {
 }
 
 impl EngineInfo for TestMinerService {
-	fn engine(&self) -> &Engine {
+	fn engine(&self) -> &dyn Engine {
 		unimplemented!()
 	}
 }
@@ -125,10 +127,13 @@ impl MinerService for TestMinerService {
 		self.authoring_params.read().clone()
 	}
 
-	fn set_author(&self, author: miner::Author) {
-		self.authoring_params.write().author = author.address();
-		if let miner::Author::Sealer(signer) = author {
-			*self.signer.write() = Some(signer);
+	fn set_author<T: Into<Option<miner::Author>>>(&self, author: T) {
+		let author_opt = author.into();
+		self.authoring_params.write().author = author_opt.as_ref().map(miner::Author::address).unwrap_or_default();
+		match author_opt {
+			Some(miner::Author::Sealer(signer)) => *self.signer.write() = Some(signer),
+			Some(miner::Author::External(_addr)) => (),
+			None => *self.signer.write() = None,
 		}
 	}
 

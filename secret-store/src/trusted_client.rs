@@ -16,33 +16,37 @@
 
 use std::sync::{Arc, Weak};
 use bytes::Bytes;
-use call_contract::RegistryInfo;
-use common_types::transaction::{Transaction, SignedTransaction, Action};
+use common_types::{
+	ids::BlockId,
+	transaction::{Transaction, SignedTransaction, Action},
+};
 use ethereum_types::Address;
-use ethcore::client::{Client, ChainInfo, Nonce, BlockId};
+use ethcore::client::Client;
+use client_traits::{ChainInfo, Nonce};
 use ethcore::miner::{Miner, MinerService};
 use sync::SyncProvider;
 use helpers::{get_confirmed_block_hash, REQUEST_CONFIRMATIONS_REQUIRED};
 use {Error, NodeKeyPair, ContractAddress};
+use registrar::RegistrarClient;
 
 #[derive(Clone)]
 /// 'Trusted' client weak reference.
 pub struct TrustedClient {
 	/// This key server node key pair.
-	self_key_pair: Arc<NodeKeyPair>,
+	self_key_pair: Arc<dyn NodeKeyPair>,
 	/// Blockchain client.
 	client: Weak<Client>,
 	/// Sync provider.
-	sync: Weak<SyncProvider>,
+	sync: Weak<dyn SyncProvider>,
 	/// Miner service.
 	miner: Weak<Miner>,
 }
 
 impl TrustedClient {
 	/// Create new trusted client.
-	pub fn new(self_key_pair: Arc<NodeKeyPair>, client: Arc<Client>, sync: Arc<SyncProvider>, miner: Arc<Miner>) -> Self {
+	pub fn new(self_key_pair: Arc<dyn NodeKeyPair>, client: Arc<Client>, sync: Arc<dyn SyncProvider>, miner: Arc<Miner>) -> Self {
 		TrustedClient {
-			self_key_pair: self_key_pair,
+			self_key_pair,
 			client: Arc::downgrade(&client),
 			sync: Arc::downgrade(&sync),
 			miner: Arc::downgrade(&miner),
@@ -91,12 +95,19 @@ impl TrustedClient {
 	/// Read contract address. If address source is registry, address only returned if current client state is
 	/// trusted. Address from registry is read from registry from block latest block with
 	/// REQUEST_CONFIRMATIONS_REQUIRED confirmations.
-	pub fn read_contract_address(&self, registry_name: String, address: &ContractAddress) -> Option<Address> {
+	pub fn read_contract_address(
+		&self,
+		registry_name: &str,
+		address: &ContractAddress
+	) -> Option<Address> {
 		match *address {
 			ContractAddress::Address(ref address) => Some(address.clone()),
 			ContractAddress::Registry => self.get().and_then(|client|
 				get_confirmed_block_hash(&*client, REQUEST_CONFIRMATIONS_REQUIRED)
-					.and_then(|block| client.registry_address(registry_name, BlockId::Hash(block)))
+					.and_then(|block| {
+						client.get_address(registry_name, BlockId::Hash(block))
+							.unwrap_or(None)
+					})
 			),
 		}
 	}

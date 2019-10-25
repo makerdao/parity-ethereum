@@ -4,19 +4,15 @@ stages:
   - publish
   - optional
 
-image:                             parity/parity-ci-linux:latest
+image:                             ${REGISTRY}/parity-ci-linux:latest
+
 variables:
   GIT_STRATEGY:                    fetch
   GIT_SUBMODULE_STRATEGY:          recursive
   CI_SERVER_NAME:                  "GitLab CI"
   CARGO_HOME:                      "/ci-cache/${CI_PROJECT_NAME}/cargo/${CI_JOB_NAME}"
-  SCCACHE_DIR:                     "/ci-cache/${CI_PROJECT_NAME}/sccache"
   CARGO_TARGET:                    x86_64-unknown-linux-gnu
-
-.no_git:                           &no_git # disable git strategy
-  variables:
-    GIT_STRATEGY:                  none
-    GIT_SUBMODULE_STRATEGY:        none
+  REGISTRY:                        registry.parity.io/parity/infrastructure/scripts
 
 .releaseable_branches:             # list of git refs for building GitLab artifacts (think "pre-release binaries")
   only:                            &releaseable_branches
@@ -41,22 +37,6 @@ variables:
   before_script:
     - rustup show
     - cargo --version
-    - SCCACHE_ERROR_LOG=/builds/parity/parity-ethereum/sccache_debug.log
-        RUST_LOG=sccache=debug
-        sccache --start-server
-    - sccache -s
-  after_script:
-    # sccache debug info 
-    - if test -e sccache_debug.log;
-      then
-        echo "_____All crate-types:_____";
-        grep 'parse_arguments.*--crate-type' sccache_debug.log | sed -re 's/.*"--crate-type", "([^"]+)".*/\1/' | sort | uniq -c;
-        echo "_____Non-cacheable reasons:_____";
-        grep CannotCache sccache_debug.log | sed -re 's/.*CannotCache\((.+)\).*/\1/' | sort | uniq -c;
-      else
-        echo "_____No logs from sccache_____";
-        exit 0;
-      fi
   tags:
     - linux-docker
 
@@ -66,7 +46,6 @@ variables:
   <<:                              *collect_artifacts
   script:
     - scripts/gitlab/build-linux.sh
-    - sccache -s
   after_script:
     - mkdir -p tools
     - cp -r scripts/docker/hub/* ./tools
@@ -84,21 +63,35 @@ cargo-check 0 3:
   <<:                              *docker-cache-status
   script:
     - time cargo check --target $CARGO_TARGET --locked --no-default-features --verbose --color=always
-    - sccache -s
+    - sccache --show-stats
 
 cargo-check 1 3:
   stage:                           test
   <<:                              *docker-cache-status
   script:
     - time cargo check --target $CARGO_TARGET --locked --manifest-path util/io/Cargo.toml --no-default-features --verbose --color=always
-    - sccache -s
+    - sccache --show-stats
 
 cargo-check 2 3:
   stage:                           test
   <<:                              *docker-cache-status
   script:
     - time cargo check --target $CARGO_TARGET --locked --manifest-path util/io/Cargo.toml --features "mio" --verbose --color=always
-    - sccache -s
+    - sccache --show-stats
+
+cargo-check-evmbin:
+  stage:                           test
+  <<:                              *docker-cache-status
+  script:
+    - time cargo check -p evmbin --target $CARGO_TARGET --locked --verbose --color=always
+    - sccache --show-stats
+
+cargo-check-benches:
+  stage:                           test
+  <<:                              *docker-cache-status
+  script:
+    - time cargo check --all --benches --target $CARGO_TARGET --locked --verbose --color=always
+    - sccache --show-stats
 
 cargo-audit:
   stage:                           test
@@ -112,21 +105,18 @@ validate-chainspecs:
   <<:                              *docker-cache-status
   script:
     - ./scripts/gitlab/validate-chainspecs.sh
-    - sccache -s
 
 test-cpp:
   stage:                           build
   <<:                              *docker-cache-status
   script:
     - ./scripts/gitlab/test-cpp.sh
-    - sccache -s
 
 test-linux:
   stage:                           build
   <<:                              *docker-cache-status
   script:
     - ./scripts/gitlab/test-linux.sh stable
-    - sccache -s
 
 test-linux-beta:
   stage:                           build
@@ -134,7 +124,6 @@ test-linux-beta:
   <<:                              *docker-cache-status
   script:
     - ./scripts/gitlab/test-linux.sh beta
-    - sccache -s
 
 test-linux-nightly:
   stage:                           build
@@ -142,12 +131,11 @@ test-linux-nightly:
   <<:                              *docker-cache-status
   script:
     - ./scripts/gitlab/test-linux.sh nightly
-    - sccache -s
   allow_failure:                   true
 
 build-android:
   <<:                              *build-on-linux
-  image:                           parity/parity-ci-android:stretch
+  image:                           ${REGISTRY}/parity-ci-android:stretch
   variables:
     CARGO_TARGET:                  armv7-linux-androideabi
 
@@ -158,21 +146,21 @@ build-linux:
 build-linux-i386:
   <<:                              *build-on-linux
   only:                            *releaseable_branches
-  image:                           parity/parity-ci-i386:latest
+  image:                           ${REGISTRY}/parity-ci-i386:latest
   variables:
     CARGO_TARGET:                  i686-unknown-linux-gnu
 
 build-linux-arm64:
   <<:                              *build-on-linux
   only:                            *releaseable_branches
-  image:                           parity/parity-ci-arm64:latest
+  image:                           ${REGISTRY}/parity-ci-arm64:latest
   variables:
     CARGO_TARGET:                  aarch64-unknown-linux-gnu
 
 build-linux-armhf:
   <<:                              *build-on-linux
   only:                            *releaseable_branches
-  image:                           parity/parity-ci-armhf:latest
+  image:                           ${REGISTRY}/parity-ci-armhf:latest
   variables:
     CARGO_TARGET:                  armv7-unknown-linux-gnueabihf
 
@@ -205,11 +193,10 @@ build-windows:
 
 publish-docker:
   stage:                           publish
-  <<:                              *no_git
   only:                            *releaseable_branches
   except:
-    variables:
-      - $SCHEDULE_TAG == "nightly"
+    - nightly
+  when:                            manual
   dependencies:
     - build-linux
   environment:
@@ -219,23 +206,24 @@ publish-docker:
   services:
     - docker:dind
   variables:
+    GIT_STRATEGY:                  none
     DOCKER_HOST:                   tcp://localhost:2375
     DOCKER_DRIVER:                 overlay2
     GIT_STRATEGY:                  none
     # DOCKERFILE:                  tools/Dockerfile
-    # CONTAINER_IMAGE:             parity/parity 
+    # CONTAINER_IMAGE:             parity/parity
   script:
-    # we stopped pushing nightlies to dockerhub, will push to own registry prb.
     - ./tools/publish-docker.sh
   tags:
     - kubernetes-parity-build
 
-publish-snap:                      &publish-snap
+publish-snap-nightly:              &publish-snap
   stage:                           publish
-  <<:                              *no_git
-  only:                            *releaseable_branches
+  only:
+    - nightly
   image:                           snapcore/snapcraft
   variables:
+    GIT_STRATEGY:                  none
     BUILD_ARCH:                    amd64
   cache:                           {}
   dependencies:
@@ -245,7 +233,12 @@ publish-snap:                      &publish-snap
   script:
     - ./tools/publish-snap.sh
 
-publish-snap-i386:
+publish-snap-manually:
+  <<:                              *publish-snap
+  only:                            *releaseable_branches
+  when:                            manual
+
+publish-snap-i386-nightly:         &publish-snap-i386
   <<:                              *publish-snap
   variables:
     BUILD_ARCH:                    i386
@@ -253,7 +246,12 @@ publish-snap-i386:
   dependencies:
     - build-linux-i386
 
-publish-snap-arm64:
+publish-snap-i386-manually:
+  <<:                              *publish-snap-i386
+  only:                            *releaseable_branches
+  when:                            manual
+
+publish-snap-arm64-nightly:        &publish-snap-arm64
   <<:                              *publish-snap
   variables:
     BUILD_ARCH:                    arm64
@@ -261,7 +259,12 @@ publish-snap-arm64:
   dependencies:
     - build-linux-arm64
 
-publish-snap-armhf:
+publish-snap-arm64-manually:
+  <<:                              *publish-snap-arm64
+  only:                            *releaseable_branches
+  when:                            manual
+
+publish-snap-armhf-nightly:        &publish-snap-armhf
   <<:                              *publish-snap
   variables:
     BUILD_ARCH:                    armhf
@@ -269,11 +272,18 @@ publish-snap-armhf:
   dependencies:
     - build-linux-armhf
 
-publish-onchain:
-  stage:                           publish
-  <<:                              *no_git
+publish-snap-armhf-manually:
+  <<:                              *publish-snap-armhf
   only:                            *releaseable_branches
+  when:                            manual
+
+publish-onchain-nightly:           &publish-onchain
+  stage:                           publish
+  only:
+    - nightly
   cache:                           {}
+  variables:
+    GIT_STRATEGY:                  none
   dependencies:
     - build-linux
     - build-darwin
@@ -283,11 +293,18 @@ publish-onchain:
   tags:
     - linux-docker
 
-publish-awss3-release:
-  image:                           parity/awscli:latest
-  stage:                           publish
+publish-onchain-manually:
+  <<:                              *publish-onchain
   only:                            *releaseable_branches
-  <<:                              *no_git
+  when:                            manual
+
+publish-release-awss3-nightly:     &publish-release-awss3
+  image:                           ${REGISTRY}/awscli:latest
+  stage:                           publish
+  only:
+    - nightly
+  variables:
+    GIT_STRATEGY:                  none
   cache:                           {}
   dependencies:
     - build-linux
@@ -309,13 +326,19 @@ publish-awss3-release:
   tags:
     - linux-docker
 
+publish-release-awss3-manually:
+  <<:                              *publish-release-awss3
+  only:                            *releaseable_branches
+  when:                            manual
+
 publish-docs:
   stage:                           publish
-  image:                           parity/parity-ci-docs:latest
+  image:                           ${REGISTRY}/parity-ci-docs:latest
   only:
     - tags
   except:
     - nightly
+  when:                            manual
   cache:                           {}
   dependencies:                    []
   script:
@@ -326,11 +349,12 @@ publish-docs:
 
 publish-av-whitelist:
   stage:                          publish
-  <<:                             *no_git
+  variables:
+    GIT_STRATEGY:                  none
   only:                           *releaseable_branches
   except:
-    variables:
-      - $SCHEDULE_TAG == "nightly"
+    - nightly
+  when:                           manual
   cache:                          {}
   dependencies:
     - build-windows

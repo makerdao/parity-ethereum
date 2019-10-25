@@ -20,17 +20,23 @@ use std::collections::BTreeMap;
 
 use crypto::DEFAULT_MAC;
 use ethereum_types::{H64, H160, H256, H512, U64, U256};
-use ethcore::client::{BlockChainClient, StateClient, Call};
+use ethcore::client::Call;
+use client_traits::{BlockChainClient, StateClient};
 use ethcore::miner::{self, MinerService, FilterOptions};
-use ethcore::snapshot::{SnapshotService, RestorationStatus};
+use snapshot::SnapshotService;
 use account_state::state::StateInfo;
 use ethcore_logger::RotatingLogger;
-use ethkey::{crypto::ecies, Brain, Generator};
+use ethkey::Brain;
+use crypto::publickey::{ecies, Generator};
 use ethstore::random_phrase;
 use jsonrpc_core::futures::future;
 use jsonrpc_core::{BoxFuture, Result};
 use sync::{SyncProvider, ManageNetwork};
-use types::ids::BlockId;
+use types::{
+	ids::BlockId,
+	verification::Unverified,
+	snapshot::RestorationStatus,
+};
 use updater::{Service as UpdateService};
 use version::version_data;
 
@@ -48,20 +54,19 @@ use v1::types::{
 	block_number_to_id
 };
 use Host;
-use ethcore::verification::queue::kind::blocks::Unverified;
 
 /// Parity implementation.
 pub struct ParityClient<C, M, U> {
 	client: Arc<C>,
 	miner: Arc<M>,
 	updater: Arc<U>,
-	sync: Arc<SyncProvider>,
-	net: Arc<ManageNetwork>,
+	sync: Arc<dyn SyncProvider>,
+	net: Arc<dyn ManageNetwork>,
 	logger: Arc<RotatingLogger>,
 	settings: Arc<NetworkSettings>,
 	signer: Option<Arc<SignerService>>,
 	ws_address: Option<Host>,
-	snapshot: Option<Arc<SnapshotService>>,
+	snapshot: Option<Arc<dyn SnapshotService>>,
 }
 
 impl<C, M, U> ParityClient<C, M, U> where
@@ -71,14 +76,14 @@ impl<C, M, U> ParityClient<C, M, U> where
 	pub fn new(
 		client: Arc<C>,
 		miner: Arc<M>,
-		sync: Arc<SyncProvider>,
+		sync: Arc<dyn SyncProvider>,
 		updater: Arc<U>,
-		net: Arc<ManageNetwork>,
+		net: Arc<dyn ManageNetwork>,
 		logger: Arc<RotatingLogger>,
 		settings: Arc<NetworkSettings>,
 		signer: Option<Arc<SignerService>>,
 		ws_address: Option<Host>,
-		snapshot: Option<Arc<SnapshotService>>,
+		snapshot: Option<Arc<dyn SnapshotService>>,
 	) -> Self {
 		ParityClient {
 			client,
@@ -218,7 +223,7 @@ impl<C, M, U, S> Parity for ParityClient<C, M, U> where
 			.map(|a| a.into_iter().map(Into::into).collect()))
 	}
 
-	fn list_storage_keys(&self, address: H160, count: u64, after: Option<H256>, block_number: Option<BlockNumber>) -> Result<Option<Vec<H256>>> {
+	fn list_storage_keys(&self, address: H160, count: Option<u64>, after: Option<H256>, block_number: Option<BlockNumber>) -> Result<Option<Vec<H256>>> {
 		let number = match block_number.unwrap_or_default() {
 			BlockNumber::Pending => {
 				warn!("BlockNumber::Pending is unsupported");
@@ -350,6 +355,7 @@ impl<C, M, U, S> Parity for ParityClient<C, M, U> where
 			(header.encoded(), None)
 		} else {
 			let id = match number {
+				BlockNumber::Hash { hash, .. } => BlockId::Hash(hash),
 				BlockNumber::Num(num) => BlockId::Number(num),
 				BlockNumber::Earliest => BlockId::Earliest,
 				BlockNumber::Latest => BlockId::Latest,
@@ -381,6 +387,7 @@ impl<C, M, U, S> Parity for ParityClient<C, M, U> where
 					.collect()
 				))
 			},
+			BlockNumber::Hash { hash, .. } => BlockId::Hash(hash),
 			BlockNumber::Num(num) => BlockId::Number(num),
 			BlockNumber::Earliest => BlockId::Earliest,
 			BlockNumber::Latest => BlockId::Latest,
@@ -412,6 +419,7 @@ impl<C, M, U, S> Parity for ParityClient<C, M, U> where
 			(state, header)
 		} else {
 			let id = match num {
+				BlockNumber::Hash { hash, .. } => BlockId::Hash(hash),
 				BlockNumber::Num(num) => BlockId::Number(num),
 				BlockNumber::Earliest => BlockId::Earliest,
 				BlockNumber::Latest => BlockId::Latest,

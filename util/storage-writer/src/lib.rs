@@ -38,7 +38,7 @@ mod noop;
 /// Something that can write storage values to disk.
 pub trait StorageWriter: Send + Sync {
     /// Returns a copy of ourself, in a box.
-    fn boxed_clone(&self) -> Box<StorageWriter>;
+    fn boxed_clone(&self) -> Box<dyn StorageWriter>;
 
     /// Whether storage writing is enabled.
     fn enabled(&self) -> bool;
@@ -47,14 +47,14 @@ pub trait StorageWriter: Send + Sync {
     fn write_storage_diffs(&mut self, header_hash: H256, header_number: u64, accounts_storage_changes: HashMap<Address, HashMap<H256, H256>>) -> io::Result<()>;
 }
 
-impl Clone for Box<StorageWriter> {
-    fn clone(&self) -> Box<StorageWriter> {
+impl Clone for Box<dyn StorageWriter> {
+    fn clone(&self) -> Box<dyn StorageWriter> {
         self.boxed_clone()
     }
 }
 
 /// Create a new `StorageWriter` trait object.
-pub fn new(config: StorageWriterConfig) -> Box<StorageWriter> {
+pub fn new(config: StorageWriterConfig) -> Box<dyn StorageWriter> {
     match config.database {
         Database::Csv => Box::new(csv_storage_writer::CsvStorageWriter::new(config)),
         Database::None => Box::new(noop::NoopStorageWriter::new()),

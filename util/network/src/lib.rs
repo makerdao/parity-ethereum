@@ -19,7 +19,6 @@
 extern crate parity_crypto as crypto;
 extern crate ethcore_io as io;
 extern crate ethereum_types;
-extern crate ethkey;
 extern crate rlp;
 extern crate ipnetwork;
 extern crate parity_snappy as snappy;
@@ -54,7 +53,7 @@ use std::str::{self, FromStr};
 use std::sync::Arc;
 use std::time::Duration;
 use ipnetwork::{IpNetwork, IpNetworkError};
-use ethkey::Secret;
+use crypto::publickey::Secret;
 use ethereum_types::H512;
 use rlp::{Decodable, DecoderError, Rlp};
 
@@ -69,13 +68,13 @@ pub type NodeId = H512;
 /// Local (temporary) peer session ID.
 pub type PeerId = usize;
 
-/// Messages used to communitate with the event loop from other threads.
+/// Messages used to communicate with the event loop from other threads.
 #[derive(Clone)]
 pub enum NetworkIoMessage {
 	/// Register a new protocol handler.
 	AddHandler {
 		/// Handler shared instance.
-		handler: Arc<NetworkProtocolHandler + Sync>,
+		handler: Arc<dyn NetworkProtocolHandler + Sync>,
 		/// Protocol Id.
 		protocol: ProtocolId,
 		/// Supported protocol versions and number of packet IDs reserved by the protocol (packet count).
@@ -361,15 +360,15 @@ impl<'a, T> NetworkContext for &'a T where T: ?Sized + NetworkContext {
 /// `Message` is the type for message data.
 pub trait NetworkProtocolHandler: Sync + Send {
 	/// Initialize the handler
-	fn initialize(&self, _io: &NetworkContext) {}
+	fn initialize(&self, _io: &dyn NetworkContext) {}
 	/// Called when new network packet received.
-	fn read(&self, io: &NetworkContext, peer: &PeerId, packet_id: u8, data: &[u8]);
+	fn read(&self, io: &dyn NetworkContext, peer: &PeerId, packet_id: u8, data: &[u8]);
 	/// Called when new peer is connected. Only called when peer supports the same protocol.
-	fn connected(&self, io: &NetworkContext, peer: &PeerId);
+	fn connected(&self, io: &dyn NetworkContext, peer: &PeerId);
 	/// Called when a previously connected peer disconnects.
-	fn disconnected(&self, io: &NetworkContext, peer: &PeerId);
+	fn disconnected(&self, io: &dyn NetworkContext, peer: &PeerId);
 	/// Timer function called after a timeout created with `NetworkContext::timeout`.
-	fn timeout(&self, _io: &NetworkContext, _timer: TimerToken) {}
+	fn timeout(&self, _io: &dyn NetworkContext, _timer: TimerToken) {}
 }
 
 /// Non-reserved peer modes.

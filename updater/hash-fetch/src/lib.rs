@@ -21,6 +21,7 @@
 #[macro_use]
 extern crate log;
 
+extern crate call_contract;
 extern crate ethabi;
 extern crate parity_bytes as bytes;
 extern crate ethereum_types;
@@ -32,10 +33,11 @@ extern crate parity_runtime;
 extern crate rand;
 extern crate rustc_hex;
 extern crate registrar;
+extern crate types;
 
 pub extern crate fetch;
 
-#[macro_use]
+// #[macro_use]
 extern crate ethabi_derive;
 #[macro_use]
 extern crate ethabi_contract;

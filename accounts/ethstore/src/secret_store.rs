@@ -17,7 +17,8 @@
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::cmp::Ordering;
-use ethkey::{Address, Message, Signature, Secret, Password, Public};
+use crypto::publickey::{Address, Message, Signature, Secret, Public};
+use ethkey::Password;
 use Error;
 use json::{Uuid, OpaqueKeyFile};
 use ethereum_types::H256;
@@ -110,7 +111,7 @@ pub trait SecretStore: SimpleSecretStore {
 
 	/// Signs a message with raw secret.
 	fn sign_with_secret(&self, secret: &OpaqueSecret, message: &Message) -> Result<Signature, Error> {
-		Ok(::ethkey::sign(&secret.0, message)?)
+		Ok(crypto::publickey::sign(&secret.0, message)?)
 	}
 
 	/// Imports presale wallet
@@ -118,7 +119,7 @@ pub trait SecretStore: SimpleSecretStore {
 	/// Imports existing JSON wallet
 	fn import_wallet(&self, vault: SecretVaultRef, json: &[u8], password: &Password, gen_id: bool) -> Result<StoreAccountRef, Error>;
 	/// Copies account between stores and vaults.
-	fn copy_account(&self, new_store: &SimpleSecretStore, new_vault: SecretVaultRef, account: &StoreAccountRef, password: &Password, new_password: &Password) -> Result<(), Error>;
+	fn copy_account(&self, new_store: &dyn SimpleSecretStore, new_vault: SecretVaultRef, account: &StoreAccountRef, password: &Password, new_password: &Password) -> Result<(), Error>;
 	/// Checks if password matches given account.
 	fn test_password(&self, account: &StoreAccountRef, password: &Password) -> Result<bool, Error>;
 

@@ -21,8 +21,9 @@ use std::fs::File;
 use std::collections::HashSet;
 use ethereum_types::{U256, Address};
 use journaldb::Algorithm;
-use ethcore::client::{Mode, BlockId, VMType, DatabaseCompactionProfile, ClientConfig, VerifierType};
+use ethcore::client::{VMType, DatabaseCompactionProfile, ClientConfig};
 use ethcore::miner::{PendingSet, Penalization};
+use verification::VerifierType;
 use miner::pool::PrioritizationStrategy;
 use cache::CacheConfig;
 use dir::DatabaseDirectories;
@@ -33,6 +34,10 @@ use db::migrate;
 use path;
 use ethkey::Password;
 use storage_writer::StorageWriterConfig;
+use types::{
+	ids::BlockId,
+	client_types::Mode,
+};
 
 pub fn to_duration(s: &str) -> Result<Duration, String> {
 	to_seconds(s).map(Duration::from_secs)
@@ -350,9 +355,12 @@ mod tests {
 	use std::collections::HashSet;
 	use tempdir::TempDir;
 	use ethereum_types::U256;
-	use ethcore::client::{Mode, BlockId};
 	use ethcore::miner::PendingSet;
 	use ethkey::Password;
+	use types::{
+		ids::BlockId,
+		client_types::Mode,
+	};
 	use super::{to_duration, to_mode, to_block_id, to_u256, to_pending_set, to_address, to_addresses, to_price, geth_ipc_path, to_bootnodes, join_set, password_from_file};
 
 	#[test]

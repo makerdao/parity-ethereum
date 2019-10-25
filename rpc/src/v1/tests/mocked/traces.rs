@@ -16,10 +16,10 @@
 
 use std::sync::Arc;
 
-use ethcore::executed::Executed;
+use machine::executed::Executed;
 use trace::trace::{Action, Res, Call};
 use trace::LocalizedTrace;
-use ethcore::client::TestBlockChainClient;
+use ethcore::test_helpers::TestBlockChainClient;
 use ethereum_types::{Address, H256};
 
 use types::transaction::CallError;

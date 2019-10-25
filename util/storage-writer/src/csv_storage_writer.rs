@@ -71,7 +71,7 @@ impl CsvStorageWriter {
 }
 
 impl StorageWriter for CsvStorageWriter {
-    fn boxed_clone(&self) -> Box<StorageWriter> {
+    fn boxed_clone(&self) -> Box<dyn StorageWriter> {
         let config = StorageWriterConfig {
             database: Database::Csv,
             enabled: true,

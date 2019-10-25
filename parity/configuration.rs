@@ -28,12 +28,12 @@ use parity_version::{version_data, version};
 use bytes::Bytes;
 use ansi_term::Colour;
 use sync::{NetworkConfiguration, validate_node_url, self};
-use ethkey::{Secret, Public};
-use ethcore::client::{VMType};
+use parity_crypto::publickey::{Secret, Public};
+use ethcore::client::VMType;
 use ethcore::miner::{stratum, MinerOptions};
-use ethcore::snapshot::SnapshotConfiguration;
-use ethcore::verification::queue::VerifierSettings;
+use snapshot::SnapshotConfiguration;
 use miner::pool;
+use verification::queue::VerifierSettings;
 
 use rpc::{IpcConfiguration, HttpConfiguration, WsConfiguration};
 use parity_rpc::NetworkSettings;
@@ -48,11 +48,12 @@ use ethcore_private_tx::{ProviderConfig, EncryptorConfig};
 use secretstore::{NodeSecretKey, Configuration as SecretStoreConfiguration, ContractAddress as SecretStoreContractAddress};
 use updater::{UpdatePolicy, UpdateFilter, ReleaseTrack};
 use run::RunCmd;
-use blockchain::{BlockchainCmd, ImportBlockchain, ExportBlockchain, KillBlockchain, ExportState, DataFormat, ResetBlockchain};
+use types::data_format::DataFormat;
+use blockchain::{BlockchainCmd, ImportBlockchain, ExportBlockchain, KillBlockchain, ExportState, ResetBlockchain};
 use export_hardcoded_sync::ExportHsyncCmd;
 use presale::ImportWallet;
 use account::{AccountCmd, NewAccount, ListAccounts, ImportAccounts, ImportFromGethAccounts};
-use snapshot::{self, SnapshotCommand};
+use snapshot_cmd::{self, SnapshotCommand};
 use network::{IpFilter};
 use storage_writer::StorageWriterConfig;
 
@@ -328,7 +329,7 @@ impl Configuration {
 				fat_db: fat_db,
 				compaction: compaction,
 				file_path: self.args.arg_snapshot_file.clone(),
-				kind: snapshot::Kind::Take,
+				kind: snapshot_cmd::Kind::Take,
 				block_at: to_block_id(&self.args.arg_snapshot_at)?,
 				max_round_blocks_to_import: self.args.arg_max_round_blocks_to_import,
 				snapshot_conf: snapshot_conf,
@@ -347,7 +348,7 @@ impl Configuration {
 				fat_db: fat_db,
 				compaction: compaction,
 				file_path: self.args.arg_restore_file.clone(),
-				kind: snapshot::Kind::Restore,
+				kind: snapshot_cmd::Kind::Restore,
 				block_at: to_block_id("latest")?, // unimportant.
 				max_round_blocks_to_import: self.args.arg_max_round_blocks_to_import,
 				snapshot_conf: snapshot_conf,
@@ -757,7 +758,7 @@ impl Configuration {
 		ret.listen_address = Some(format!("{}", listen));
 		ret.public_address = public.map(|p| format!("{}", p));
 		ret.use_secret = match self.args.arg_node_key.as_ref()
-			.map(|s| s.parse::<Secret>().or_else(|_| Secret::from_unsafe_slice(keccak(s).as_bytes())).map_err(|e| format!("Invalid key: {:?}", e))
+			.map(|s| s.parse::<Secret>().or_else(|_| Secret::import_key(keccak(s).as_bytes())).map_err(|e| format!("Invalid key: {:?}", e))
 			) {
 			None => None,
 			Some(Ok(key)) => Some(key),
@@ -935,7 +936,8 @@ impl Configuration {
 			logs_path: match self.args.flag_private_enabled {
 				true => Some(dirs.base),
 				false => None,
-			}
+			},
+			use_offchain_storage: self.args.flag_private_state_offchain,
 		};
 
 		let encryptor_conf = EncryptorConfig {
@@ -1222,14 +1224,15 @@ mod tests {
 	use std::str::FromStr;
 
 	use tempdir::TempDir;
-	use ethcore::client::{VMType, BlockId};
+	use ethcore::client::VMType;
 	use ethcore::miner::MinerOptions;
 	use miner::pool::PrioritizationStrategy;
 	use parity_rpc::NetworkSettings;
 	use updater::{UpdatePolicy, UpdateFilter, ReleaseTrack};
-
+	use types::ids::BlockId;
+	use types::data_format::DataFormat;
 	use account::{AccountCmd, NewAccount, ImportAccounts, ListAccounts};
-	use blockchain::{BlockchainCmd, ImportBlockchain, ExportBlockchain, DataFormat, ExportState};
+	use blockchain::{BlockchainCmd, ImportBlockchain, ExportBlockchain, ExportState};
 	use cli::Args;
 	use dir::{Directories, default_hypervisor_path};
 	use helpers::{default_network_config};

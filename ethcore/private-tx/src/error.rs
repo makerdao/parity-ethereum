@@ -23,8 +23,7 @@ use types::{
 	errors::{EthcoreError, ExecutionError},
 	transaction::Error as TransactionError,
 };
-use ethkey::Error as KeyError;
-use ethkey::crypto::Error as CryptoError;
+use crypto::publickey::Error as CryptoError;
 use txpool::VerifiedTransaction;
 use private_transactions::VerifiedPrivateTransaction;
 use serde_json::{Error as SerdeError};
@@ -99,6 +98,12 @@ pub enum Error {
 	/// Account for signing requests to key server not set.
 	#[display(fmt = "Account for signing requests to key server not set.")]
 	KeyServerAccountNotSet,
+	/// Private state for the contract was not found in the local storage.
+	#[display(fmt = "Private state for the contract was not found in the local storage.")]
+	PrivateStateNotFound,
+	/// Cannot write state to the local database.
+	#[display(fmt = "Cannot write state to the local database.")]
+	DatabaseWriteError,
 	/// Encryption key is not found on key server.
 	#[display(fmt = "Encryption key is not found on key server for {}", _0)]
 	EncryptionKeyNotFound(Address),
@@ -117,9 +122,6 @@ pub enum Error {
 	/// VM execution error.
 	#[display(fmt = "VM execution error {}", _0)]
 	Execution(ExecutionError),
-	/// General signing error.
-	#[display(fmt = "General signing error {}", _0)]
-	Key(KeyError),
 	/// Error of transactions processing.
 	#[display(fmt = "Error of transactions processing {}", _0)]
 	Transaction(TransactionError),
@@ -132,7 +134,7 @@ pub enum Error {
 }
 
 impl error::Error for Error {
-	fn source(&self) -> Option<&(error::Error + 'static)> {
+	fn source(&self) -> Option<&(dyn error::Error + 'static)> {
 		match self {
 			Error::Io(e) => Some(e),
 			Error::Decoder(e) => Some(e),
@@ -141,7 +143,6 @@ impl error::Error for Error {
 			Error::Json(e) => Some(e),
 			Error::Crypto(e) => Some(e),
 			Error::Execution(e) => Some(e),
-			Error::Key(e) => Some(e),
 			Error::Transaction(e) => Some(e),
 			Error::Ethcore(e) => Some(e),
 			_ => None,
@@ -158,12 +159,6 @@ impl From<String> for Error {
 impl From<std::io::Error> for Error {
 	fn from(err: std::io::Error) -> Self {
 		Error::Io(err).into()
-	}
-}
-
-impl From<KeyError> for Error {
-	fn from(err: KeyError) -> Self {
-		Error::Key(err).into()
 	}
 }
 

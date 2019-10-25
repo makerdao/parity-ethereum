@@ -16,9 +16,13 @@
 
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
+use common_types::{
+	chain_notify::NewBlocks,
+	ids::BlockId
+};
 use parking_lot::{Mutex, RwLock};
 use call_contract::CallContract;
-use ethcore::client::{BlockId, ChainNotify, NewBlocks};
+use client_traits::ChainNotify;
 use ethereum_types::Address;
 use ethabi::FunctionOutputDecoder;
 use trusted_client::TrustedClient;
@@ -96,7 +100,10 @@ impl CachedContract {
 	}
 
 	pub fn update_contract_address(&mut self) {
-		let contract_address = self.client.read_contract_address(ACL_CHECKER_CONTRACT_REGISTRY_NAME.into(), &self.address_source);
+		let contract_address = self.client.read_contract_address(
+			ACL_CHECKER_CONTRACT_REGISTRY_NAME,
+			&self.address_source
+		);
 		if contract_address != self.contract_address {
 			trace!(target: "secretstore", "Configuring for ACL checker contract from address {:?}",
 				contract_address);

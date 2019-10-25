@@ -744,7 +744,7 @@ impl<B: Backend> State<B> {
 	}
 
 	/// Write watched state/storage trie vals to secondary datastore
-	pub fn write_watched_state(&mut self, header_hash: H256, header_number: u64, mut storage_writer: Box<storage_writer::StorageWriter>) -> Result<(), Error> {
+	pub fn write_watched_state(&mut self, header_hash: H256, header_number: u64, mut storage_writer: Box<dyn storage_writer::StorageWriter>) -> Result<(), Error> {
 		let accounts_storage_diffs = {
 			let mut accounts_storage_diffs: HashMap<Address, HashMap<H256, H256>> = HashMap::new();
 			for (key, val) in self.cache.borrow().iter() {
@@ -764,7 +764,7 @@ impl<B: Backend> State<B> {
 	/// Propagate local cache into shared canonical state cache.
 	fn propagate_to_global_cache(&mut self) {
 		let mut addresses = self.cache.borrow_mut();
-		trace!("Committing cache {:?} entries", addresses.len());
+		trace!(target: "state", "Committing cache {:?} entries", addresses.len());
 		for (address, a) in addresses.drain().filter(|&(_, ref a)| a.state == AccountState::Committed || a.state == AccountState::CleanFresh) {
 			self.db.add_to_account_cache(address, a.account, a.state == AccountState::Committed);
 		}

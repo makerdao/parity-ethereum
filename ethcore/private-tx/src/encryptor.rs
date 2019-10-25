@@ -26,7 +26,7 @@ use std::collections::hash_map::Entry;
 use parking_lot::Mutex;
 use ethereum_types::{H128, H256, Address};
 use ethjson;
-use ethkey::{Signature, Public};
+use crypto::publickey::{Signature, Public};
 use crypto;
 use futures::Future;
 use fetch::{Fetch, Client as FetchClient, Method, BodyReader, Request};
@@ -81,7 +81,7 @@ pub struct SecretStoreEncryptor {
 	config: EncryptorConfig,
 	client: FetchClient,
 	sessions: Mutex<HashMap<Address, EncryptionSession>>,
-	signer: Arc<Signer>,
+	signer: Arc<dyn Signer>,
 }
 
 impl SecretStoreEncryptor {
@@ -89,7 +89,7 @@ impl SecretStoreEncryptor {
 	pub fn new(
 		config: EncryptorConfig,
 		client: FetchClient,
-		signer: Arc<Signer>,
+		signer: Arc<dyn Signer>,
 	) -> Result<Self, Error> {
 		Ok(SecretStoreEncryptor {
 			config,

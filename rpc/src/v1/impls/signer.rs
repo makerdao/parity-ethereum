@@ -19,7 +19,6 @@
 use std::sync::Arc;
 
 use ethereum_types::{U256, H520};
-use ethkey;
 use parity_runtime::Executor;
 use parking_lot::Mutex;
 use rlp::Rlp;
@@ -40,7 +39,7 @@ use v1::types::{TransactionModification, ConfirmationRequest, ConfirmationRespon
 /// Transactions confirmation (personal) rpc implementation.
 pub struct SignerClient<D: Dispatcher> {
 	signer: Arc<SignerService>,
-	accounts: Arc<dispatch::Accounts>,
+	accounts: Arc<dyn dispatch::Accounts>,
 	dispatcher: D,
 	subscribers: Arc<Mutex<Subscribers<Sink<Vec<ConfirmationRequest>>>>>,
 	deprecation_notice: DeprecationNotice,
@@ -49,7 +48,7 @@ pub struct SignerClient<D: Dispatcher> {
 impl<D: Dispatcher + 'static> SignerClient<D> {
 	/// Create new instance of signer client.
 	pub fn new(
-		accounts: Arc<dispatch::Accounts>,
+		accounts: Arc<dyn dispatch::Accounts>,
 		dispatcher: D,
 		signer: &Arc<SignerService>,
 		executor: Executor,
@@ -81,7 +80,7 @@ impl<D: Dispatcher + 'static> SignerClient<D> {
 	}
 
 	fn confirm_internal<F, T>(&self, id: U256, modification: TransactionModification, f: F) -> BoxFuture<WithToken<ConfirmationResponse>> where
-		F: FnOnce(D, &Arc<dispatch::Accounts>, ConfirmationPayload) -> T,
+		F: FnOnce(D, &Arc<dyn dispatch::Accounts>, ConfirmationPayload) -> T,
 		T: IntoFuture<Item=WithToken<ConfirmationResponse>, Error=Error>,
 		T::Future: Send + 'static
 	{
@@ -216,16 +215,16 @@ impl<D: Dispatcher + 'static> Signer for SignerClient<D> {
 				},
 				ConfirmationPayload::EthSignMessage(address, data) => {
 					let expected_hash = eth_data_hash(data);
-					let signature = ethkey::Signature::from_electrum(&bytes.0);
-					match ethkey::verify_address(&address, &signature, &expected_hash) {
+					let signature = crypto::publickey::Signature::from_electrum(&bytes.0);
+					match crypto::publickey::verify_address(&address, &signature, &expected_hash) {
 						Ok(true) => Ok(ConfirmationResponse::Signature(H520::from_slice(bytes.0.as_slice()))),
 						Ok(false) => Err(errors::invalid_params("Sender address does not match the signature.", ())),
 						Err(err) => Err(errors::invalid_params("Invalid signature received.", err)),
 					}
 				},
 				ConfirmationPayload::SignMessage(address, hash) => {
-					let signature = ethkey::Signature::from_electrum(&bytes.0);
-					match ethkey::verify_address(&address, &signature, &hash) {
+					let signature = crypto::publickey::Signature::from_electrum(&bytes.0);
+					match crypto::publickey::verify_address(&address, &signature, &hash) {
 						Ok(true) => Ok(ConfirmationResponse::Signature(H520::from_slice(bytes.0.as_slice()))),
 						Ok(false) => Err(errors::invalid_params("Sender address does not match the signature.", ())),
 						Err(err) => Err(errors::invalid_params("Invalid signature received.", err)),

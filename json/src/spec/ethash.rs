@@ -17,16 +17,21 @@
 //! Ethash params deserialization.
 
 use std::collections::BTreeMap;
-use uint::{self, Uint};
-use bytes::Bytes;
-use hash::Address;
+use crate::{
+	bytes::Bytes,
+	uint::{self, Uint},
+	hash::Address
+};
+use serde::Deserialize;
 
 /// Deserializable doppelganger of block rewards for EthashParams
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[serde(untagged)]
 pub enum BlockReward {
+	/// Single block reward
 	Single(Uint),
+	/// Several block rewards
 	Multi(BTreeMap<Uint, Uint>),
 }
 
@@ -86,6 +91,7 @@ pub struct EthashParams {
 	pub ecip1010_continue_transition: Option<Uint>,
 
 	/// See main EthashParams docs.
+	#[serde(default, deserialize_with="uint::validate_optional_non_zero")]
 	pub ecip1017_era_rounds: Option<Uint>,
 
 	/// Delays of difficulty bombs.
@@ -96,7 +102,6 @@ pub struct EthashParams {
 	/// EXPIP-2 duration limit
 	pub expip2_duration_limit: Option<Uint>,
 	/// Block to transition to progpow
-	#[serde(rename="progpowTransition")]
 	pub progpow_transition: Option<Uint>,
 }
 
@@ -110,12 +115,9 @@ pub struct Ethash {
 
 #[cfg(test)]
 mod tests {
-	use serde_json;
-	use uint::Uint;
-	use ethereum_types::{H160, U256};
-	use hash::Address;
-	use spec::ethash::{Ethash, EthashParams, BlockReward};
 	use std::str::FromStr;
+	use super::{Address, BlockReward, Ethash, EthashParams, Uint};
+	use ethereum_types::{H160, U256};
 
 	#[test]
 	fn ethash_deserialization() {

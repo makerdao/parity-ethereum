@@ -30,7 +30,7 @@ impl NoopStorageWriter {
 }
 
 impl StorageWriter for NoopStorageWriter {
-    fn boxed_clone(&self) -> Box<StorageWriter> {
+    fn boxed_clone(&self) -> Box<dyn StorageWriter> {
         Box::new(NoopStorageWriter)
     }
 

@@ -36,10 +36,11 @@
 extern crate ethbloom;
 extern crate ethereum_types;
 extern crate ethjson;
-extern crate ethkey;
+extern crate parity_crypto;
 #[macro_use]
 extern crate derive_more;
 extern crate keccak_hash as hash;
+extern crate parking_lot;
 extern crate parity_bytes as bytes;
 extern crate patricia_trie_ethereum as ethtrie;
 extern crate rlp;
@@ -64,23 +65,27 @@ pub mod block;
 pub mod block_status;
 pub mod blockchain_info;
 pub mod call_analytics;
+pub mod chain_notify;
+pub mod client_types;
 pub mod encoded;
 pub mod engines;
 pub mod errors;
 pub mod filter;
 pub mod header;
 pub mod ids;
+pub mod io_message;
+pub mod import_route;
 pub mod log_entry;
 pub mod pruning_info;
 pub mod receipt;
-pub mod restoration_status;
 pub mod security_level;
-pub mod snapshot_manifest;
+pub mod snapshot;
 pub mod state_diff;
 pub mod trace_filter;
 pub mod transaction;
 pub mod tree_route;
-pub mod verification_queue_info;
+pub mod verification;
+pub mod data_format;
 
 /// Type for block number.
 pub type BlockNumber = u64;
