@@ -300,7 +300,7 @@ usage! {
 
 			ARG arg_chain: (String) = "foundation", or |c: &Config| c.parity.as_ref()?.chain.clone(),
 			"--chain=[CHAIN]",
-			"Specify the blockchain type. CHAIN may be either a JSON chain specification file or ethereum, classic, poacore, xdai, volta, ewc, musicoin, ellaism, mix, callisto, morden, ropsten, kovan, rinkeby, goerli, kotti, poasokol, testnet, or dev.",
+			"Specify the blockchain type. CHAIN may be either a JSON chain specification file or ethereum, classic, poacore, xdai, volta, ewc, musicoin, ellaism, mix, callisto, morden, mordor, ropsten, kovan, rinkeby, goerli, kotti, poasokol, testnet, evantestcore, evancore or dev.",
 
 			ARG arg_keys_path: (String) = "$BASE/keys", or |c: &Config| c.parity.as_ref()?.keys_path.clone(),
 			"--keys-path=[PATH]",
@@ -347,6 +347,10 @@ usage! {
 			ARG arg_unlock: (Option<String>) = None, or |c: &Config| c.account.as_ref()?.unlock.as_ref().map(|vec| vec.join(",")),
 			"--unlock=[ACCOUNTS]",
 			"Unlock ACCOUNTS for the duration of the execution. ACCOUNTS is a comma-delimited list of addresses.",
+
+			ARG arg_enable_signing_queue: (bool) = false, or |c: &Config| c.account.as_ref()?.enable_signing_queue,
+			"--enable-signing-queue=[BOOLEAN]",
+			"Enables the signing queue for external transaction signing either via CLI or personal_unlockAccount, turned off by default.",
 
 			ARG arg_password: (Vec<String>) = Vec::new(), or |c: &Config| c.account.as_ref()?.password.clone(),
 			"--password=[FILE]...",
@@ -506,17 +510,17 @@ usage! {
 			"--jsonrpc-hosts=[HOSTS]",
 			"List of allowed Host header values. This option will validate the Host header sent by the browser, it is additional security against some attack vectors. Special options: \"all\", \"none\",.",
 
-			ARG arg_jsonrpc_threads: (usize) = 4usize, or |c: &Config| c.rpc.as_ref()?.processing_threads,
-			"--jsonrpc-threads=[THREADS]",
-			"Turn on additional processing threads for JSON-RPC servers (all transports). Setting this to a non-zero value allows parallel execution of cpu-heavy queries.",
+			ARG arg_jsonrpc_threads: (Option<usize>) = None, or |_| None,
+			"--jsonrpc-threads=[NUM]",
+			"DEPRECATED, DOES NOTHING",
+
+			ARG arg_jsonrpc_server_threads: (Option<usize>) = Some(4), or |c: &Config| c.rpc.as_ref()?.server_threads,
+			"--jsonrpc-server-threads=[NUM]",
+			"Enables multiple threads handling incoming connections for HTTP JSON-RPC server.",
 
 			ARG arg_jsonrpc_cors: (String) = "none", or |c: &Config| c.rpc.as_ref()?.cors.as_ref().map(|vec| vec.join(",")),
 			"--jsonrpc-cors=[URL]",
 			"Specify CORS header for HTTP JSON-RPC API responses. Special options: \"all\", \"none\".",
-
-			ARG arg_jsonrpc_server_threads: (Option<usize>) = None, or |c: &Config| c.rpc.as_ref()?.server_threads,
-			"--jsonrpc-server-threads=[NUM]",
-			"Enables multiple threads handling incoming connections for HTTP JSON-RPC server.",
 
 			ARG arg_jsonrpc_max_payload: (Option<usize>) = None, or |c: &Config| c.rpc.as_ref()?.max_payload,
 			"--jsonrpc-max-payload=[MB]",
@@ -563,6 +567,10 @@ usage! {
 			ARG arg_ipc_path: (String) = if cfg!(windows) { r"\\.\pipe\jsonrpc.ipc" } else { "$BASE/jsonrpc.ipc" }, or |c: &Config| c.ipc.as_ref()?.path.clone(),
 			"--ipc-path=[PATH]",
 			"Specify custom path for JSON-RPC over IPC service.",
+
+			ARG arg_ipc_chmod: (String) = "660", or |c: &Config| c.ipc.as_ref()?.chmod.clone(),
+			"--ipc-chmod=[NUM]",
+			"Specify octal value for ipc socket permissions (unix/bsd only)",
 
 			ARG arg_ipc_apis: (String) = "web3,eth,pubsub,net,parity,parity_pubsub,parity_accounts,private,traces,rpc,parity_transactions_pool", or |c: &Config| c.ipc.as_ref()?.apis.as_ref().map(|vec| vec.join(",")),
 			"--ipc-apis=[APIS]",
@@ -1206,6 +1214,7 @@ struct Operating {
 #[serde(deny_unknown_fields)]
 struct Account {
 	unlock: Option<Vec<String>>,
+	enable_signing_queue: Option<bool>,
 	password: Option<Vec<String>>,
 	keys_iterations: Option<u32>,
 	refresh_time: Option<u64>,
@@ -1274,7 +1283,6 @@ struct Rpc {
 	apis: Option<Vec<String>>,
 	hosts: Option<Vec<String>>,
 	server_threads: Option<usize>,
-	processing_threads: Option<usize>,
 	max_payload: Option<usize>,
 	keep_alive: Option<bool>,
 	experimental_rpcs: Option<bool>,
@@ -1297,6 +1305,7 @@ struct Ws {
 #[derive(Default, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Ipc {
+	chmod: Option<String>,
 	disable: Option<bool>,
 	path: Option<String>,
 	apis: Option<Vec<String>>,
@@ -1578,14 +1587,14 @@ mod tests {
 		// given
 		let mut config = Config::default();
 		let mut operating = Operating::default();
-		operating.chain = Some("morden".into());
+		operating.chain = Some("mordor".into());
 		config.parity = Some(operating);
 
 		// when
 		let args = Args::parse_with_config(&["parity"], config).unwrap();
 
 		// then
-		assert_eq!(args.arg_chain, "morden".to_owned());
+		assert_eq!(args.arg_chain, "mordor".to_owned());
 	}
 
 	#[test]
@@ -1593,7 +1602,7 @@ mod tests {
 		// given
 		let mut config = Config::default();
 		let mut operating = Operating::default();
-		operating.chain = Some("morden".into());
+		operating.chain = Some("mordor".into());
 		config.parity = Some(operating);
 
 		// when
@@ -1743,6 +1752,7 @@ mod tests {
 			arg_restore_file: None,
 			arg_tools_hash_file: None,
 
+			arg_enable_signing_queue: false,
 			arg_signer_sign_id: None,
 			arg_signer_reject_id: None,
 			arg_dapp_path: None,
@@ -1830,8 +1840,8 @@ mod tests {
 			arg_jsonrpc_cors: "null".into(),
 			arg_jsonrpc_apis: "web3,eth,net,parity,traces,rpc,secretstore".into(),
 			arg_jsonrpc_hosts: "none".into(),
-			arg_jsonrpc_server_threads: None,
-			arg_jsonrpc_threads: 4,
+			arg_jsonrpc_server_threads: Some(4),
+			arg_jsonrpc_threads: None, // DEPRECATED, does nothing
 			arg_jsonrpc_max_payload: None,
 			arg_poll_lifetime: 60u32,
 			flag_jsonrpc_allow_missing_blocks: false,
@@ -1849,7 +1859,7 @@ mod tests {
 			flag_no_ipc: false,
 			arg_ipc_path: "$HOME/.parity/jsonrpc.ipc".into(),
 			arg_ipc_apis: "web3,eth,net,parity,parity_accounts,personal,traces,rpc,secretstore".into(),
-
+			arg_ipc_chmod: "660".into(),
 			// DAPPS
 			arg_dapps_path: Some("$HOME/.parity/dapps".into()),
 			flag_no_dapps: false,
@@ -2063,6 +2073,7 @@ mod tests {
 				_legacy_public_node: None,
 			}),
 			account: Some(Account {
+				enable_signing_queue: None,
 				unlock: Some(vec!["0x1".into(), "0x2".into(), "0x3".into()]),
 				password: Some(vec!["passwdfile path".into()]),
 				keys_iterations: None,
@@ -2112,8 +2123,7 @@ mod tests {
 				cors: None,
 				apis: None,
 				hosts: None,
-				server_threads: None,
-				processing_threads: None,
+				server_threads: Some(13),
 				max_payload: None,
 				keep_alive: None,
 				experimental_rpcs: None,
@@ -2123,6 +2133,7 @@ mod tests {
 			ipc: Some(Ipc {
 				disable: None,
 				path: None,
+				chmod: None,
 				apis: Some(vec!["rpc".into(), "eth".into()]),
 			}),
 			dapps: Some(Dapps {

@@ -22,9 +22,11 @@ use keccak_hasher::KeccakHasher;
 use rlp::{DecoderError, RlpStream, Rlp, Prototype};
 use std::marker::PhantomData;
 use std::borrow::Borrow;
-use trie::{NibbleSlice, NodeCodec, node::Node, ChildReference, Partial};
-
-
+use std::ops::Range;
+use trie::{
+	NodeCodec, ChildReference, Partial,
+	node::{NibbleSlicePlan, NodePlan, NodeHandlePlan},
+};
 
 /// Concrete implementation of a `NodeCodec` with Rlp encoding, generic over the `Hasher`
 #[derive(Default, Clone)]
@@ -64,19 +66,38 @@ fn encode_partial_inner_iter<'a>(
 	std::iter::once(first).chain(partial_remaining)
 }
 
+fn decode_value_range(rlp: Rlp, mut offset: usize) -> Result<Range<usize>, DecoderError> {
+	let payload = rlp.payload_info()?;
+	offset += payload.header_len;
+	Ok(offset..(offset + payload.value_len))
+}
+
+fn decode_child_handle_plan<H: Hasher>(child_rlp: Rlp, mut offset: usize)
+	-> Result<NodeHandlePlan, DecoderError>
+{
+	Ok(if child_rlp.is_data() && child_rlp.size() == H::LENGTH {
+		let payload = child_rlp.payload_info()?;
+		offset += payload.header_len;
+		NodeHandlePlan::Hash(offset..(offset + payload.value_len))
+	} else {
+		NodeHandlePlan::Inline(offset..(offset + child_rlp.as_raw().len()))
+	})
+}
+
 // NOTE: what we'd really like here is:
 // `impl<H: Hasher> NodeCodec<H> for RlpNodeCodec<H> where H::Out: Decodable`
 // but due to the current limitations of Rust const evaluation we can't
 // do `const HASHED_NULL_NODE: H::Out = H::Out( … … )`. Perhaps one day soon?
-impl NodeCodec<KeccakHasher> for RlpNodeCodec<KeccakHasher> {
+impl NodeCodec for RlpNodeCodec<KeccakHasher> {
 
 	type Error = DecoderError;
+	type HashOut = <KeccakHasher as Hasher>::Out;
 
 	fn hashed_null_node() -> <KeccakHasher as Hasher>::Out {
 		HASHED_NULL_NODE
 	}
 
-	fn decode(data: &[u8]) -> ::std::result::Result<Node, Self::Error> {
+	fn decode_plan(data: &[u8]) -> Result<NodePlan, Self::Error> {
 		let r = Rlp::new(data);
 		match r.prototype()? {
 			// either leaf or extension - decode first item with NibbleSlice::???
@@ -85,61 +106,58 @@ impl NodeCodec<KeccakHasher> for RlpNodeCodec<KeccakHasher> {
 			// if extension, second item is a node (either SHA3 to be looked up and
 			// fed back into this function or inline RLP which can be fed back into this function).
 			Prototype::List(2) => {
-				let enc_nibble = r.at(0)?.data()?;
-				let from_encoded = if enc_nibble.is_empty() {
-					(NibbleSlice::new(&[]), false)
+				let (partial_rlp, mut partial_offset) = r.at_with_offset(0)?;
+				let partial_payload = partial_rlp.payload_info()?;
+				partial_offset += partial_payload.header_len;
+
+				let (partial, is_leaf) = if partial_rlp.is_empty() {
+					(NibbleSlicePlan::new(partial_offset..partial_offset, 0), false)
 				} else {
+					let partial_header = partial_rlp.data()?[0];
 					// check leaf bit from header.
-					let is_leaf = enc_nibble[0] & 32 == 32;
+					let is_leaf = partial_header & 32 == 32;
 					// Check the header bit to see if we're dealing with an odd partial (only a nibble of header info)
 					// or an even partial (skip a full byte).
-					let (start, byte_offset) = if enc_nibble[0] & 16 == 16 { (0, 1) } else { (1, 0) };
-					(NibbleSlice::new_offset(&enc_nibble[start..], byte_offset), is_leaf)
+					let (start, byte_offset) = if partial_header & 16 == 16 { (0, 1) } else { (1, 0) };
+					let range = (partial_offset + start)..(partial_offset + partial_payload.value_len);
+					(NibbleSlicePlan::new(range, byte_offset), is_leaf)
 				};
-				match from_encoded {
-					(slice, true) => Ok(Node::Leaf(slice, r.at(1)?.data()?)),
-					(slice, false) => Ok(Node::Extension(slice, {
-						let value = r.at(1)?;
-						if value.is_data() && value.size() == KeccakHasher::LENGTH {
-							value.data()?
-						} else {
-							value.as_raw()
-						}
-					})),
-				}
+
+				let (value_rlp, value_offset) = r.at_with_offset(1)?;
+				Ok(if is_leaf {
+					let value = decode_value_range(value_rlp, value_offset)?;
+					NodePlan::Leaf { partial, value }
+				} else {
+					let child = decode_child_handle_plan::<KeccakHasher>(value_rlp, value_offset)?;
+					NodePlan::Extension { partial, child }
+				})
 			},
 			// branch - first 16 are nodes, 17th is a value (or empty).
 			Prototype::List(17) => {
-				let mut nodes = [None as Option<&[u8]>; 16];
-				for i in 0..16 {
-					let value = r.at(i)?;
-					if value.is_empty() {
-						nodes[i] = None;
-					} else {
-						if value.is_data() && value.size() == KeccakHasher::LENGTH {
-							nodes[i] = Some(value.data()?);
-						} else {
-							nodes[i] = Some(value.as_raw());
-						}
+				let mut children = [
+					None, None, None, None, None, None, None, None,
+					None, None, None, None, None, None, None, None,
+				];
+				for (i, child) in children.iter_mut().enumerate() {
+					let (child_rlp, child_offset) = r.at_with_offset(i)?;
+					if !child_rlp.is_empty() {
+						*child = Some(
+							decode_child_handle_plan::<KeccakHasher>(child_rlp, child_offset)?
+						);
 					}
 				}
-				Ok(Node::Branch(nodes, if r.at(16)?.is_empty() { None } else { Some(r.at(16)?.data()?) }))
+				let (value_rlp, value_offset) = r.at_with_offset(16)?;
+				let value = if value_rlp.is_empty() {
+					None
+				} else {
+					Some(decode_value_range(value_rlp, value_offset)?)
+				};
+				Ok(NodePlan::Branch { value, children })
 			},
 			// an empty branch index.
-			Prototype::Data(0) => Ok(Node::Empty),
+			Prototype::Data(0) => Ok(NodePlan::Empty),
 			// something went wrong.
 			_ => Err(DecoderError::Custom("Rlp is not valid."))
-		}
-	}
-
-	fn try_decode_hash(data: &[u8]) -> Option<<KeccakHasher as Hasher>::Out> {
-
-		if data.len() == KeccakHasher::LENGTH {
-			let mut r = <KeccakHasher as Hasher>::Out::default();
-			r.as_mut().copy_from_slice(data);
-			Some(r)
-		} else {
-			None
 		}
 	}
 
@@ -210,4 +228,52 @@ impl NodeCodec<KeccakHasher> for RlpNodeCodec<KeccakHasher> {
 		unreachable!("This codec is only used with a trie Layout that uses extension node.")
 	}
 
+}
+
+#[cfg(test)]
+mod tests {
+	use trie::{NodeCodec, node::{Node, NodeHandle}, NibbleSlice};
+	use rlp::RlpStream;
+	use RlpNodeCodec;
+
+	#[test]
+	fn decode_leaf() {
+		let mut stream = RlpStream::new_list(2);
+		stream.append(&"cat").append(&"dog");
+		let data = stream.out();
+		let r = RlpNodeCodec::decode(&data);
+		assert!(r.is_ok());
+		// "c" & 16 != 16 => `start` == 1
+		let cat_nib = NibbleSlice::new(&b"at"[..]);
+		assert_eq!(r.unwrap(), Node::Leaf(cat_nib, &b"dog"[..]));
+	}
+
+	#[test]
+	fn decode_ext() {
+		let mut stream = RlpStream::new_list(2);
+		let payload = vec![0x1, 0x2, 0x3u8];
+		stream.append(&"").append(&payload);
+		let data = stream.out();
+		let decoded = RlpNodeCodec::decode(&data);
+
+		assert!(decoded.is_ok());
+		assert_eq!(
+			decoded.unwrap(),
+			Node::Extension(
+				NibbleSlice::new(&[]),
+				NodeHandle::Inline(&[0x80 + 0x3, 0x1, 0x2, 0x3])
+			)
+		);
+	}
+
+	#[test]
+	fn decode_empty_data() {
+		let mut stream = RlpStream::new();
+		stream.append_empty_data();
+		let data = stream.out();
+		assert_eq!(
+			RlpNodeCodec::decode(&data),
+			Ok(Node::Empty),
+		);
+	}
 }

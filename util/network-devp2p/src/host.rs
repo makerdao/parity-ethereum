@@ -37,7 +37,6 @@ use mio::{
 use parity_path::restrict_permissions_owner;
 use parking_lot::{Mutex, RwLock};
 use rlp::{Encodable, RlpStream};
-use rustc_hex::ToHex;
 
 use ethcore_io::{IoContext, IoHandler, IoManager, StreamToken, TimerToken};
 use parity_crypto::publickey::{Generator, KeyPair, Random, Secret};
@@ -462,7 +461,7 @@ impl Host {
 				let public_address = select_public_address(local_endpoint.address.port());
 				let public_endpoint = NodeEndpoint { address: public_address, udp_port: local_endpoint.udp_port };
 				if self.info.read().config.nat_enabled {
-					match map_external_address(&local_endpoint) {
+					match map_external_address(&local_endpoint, &self.info.read().config.nat_type) {
 						Some(endpoint) => {
 							info!("NAT mapped to external address {}", endpoint.address);
 							endpoint

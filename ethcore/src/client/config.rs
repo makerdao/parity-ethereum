@@ -24,8 +24,6 @@ use trace::Config as TraceConfig;
 use types::client_types::Mode;
 use verification::{VerifierType, QueueConfig};
 
-pub use evm::VMType;
-
 /// Client state db compaction profile
 #[derive(Debug, PartialEq, Clone)]
 pub enum DatabaseCompactionProfile {
@@ -65,8 +63,6 @@ pub struct ClientConfig {
 	pub blockchain: BlockChainConfig,
 	/// Trace configuration.
 	pub tracing: TraceConfig,
-	/// VM type.
-	pub vm_type: VMType,
 	/// Fat DB enabled?
 	pub fat_db: bool,
 	/// The JournalDB ("pruning") algorithm to use.
@@ -110,7 +106,6 @@ impl Default for ClientConfig {
 			queue: Default::default(),
 			blockchain: Default::default(),
 			tracing: Default::default(),
-			vm_type: Default::default(),
 			fat_db: false,
 			pruning: journaldb::Algorithm::OverlayRecent,
 			storage_writer_config: Default::default(),

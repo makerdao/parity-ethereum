@@ -35,15 +35,24 @@ pub const DAPPS_DOMAIN: &'static str = "web3.site";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HttpConfiguration {
+	/// Is RPC over HTTP enabled (default is true)?
 	pub enabled: bool,
+	/// The IP of the network interface used (default is 127.0.0.1).
 	pub interface: String,
+	/// The network port (default is 8545).
 	pub port: u16,
+	/// The categories of RPC calls enabled.
 	pub apis: ApiSet,
+	/// CORS headers
 	pub cors: Option<Vec<String>>,
+	/// Specify a list of valid hosts we accept requests from.
 	pub hosts: Option<Vec<String>>,
+	/// Number of HTTP server threads to use to handle incoming requests (default is 4).
 	pub server_threads: usize,
-	pub processing_threads: usize,
+	/// Sets the maximum size of a request body in megabytes (default is 5 MiB).
 	pub max_payload: usize,
+	/// Use keepalive messages on the underlying socket: SO_KEEPALIVE as well as the TCP_KEEPALIVE
+	/// or TCP_KEEPIDLE options depending on your platform (default is true).
 	pub keep_alive: bool,
 }
 
@@ -56,8 +65,7 @@ impl Default for HttpConfiguration {
 			apis: ApiSet::UnsafeContext,
 			cors: Some(vec![]),
 			hosts: Some(vec![]),
-			server_threads: 1,
-			processing_threads: 4,
+			server_threads: 4,
 			max_payload: 5,
 			keep_alive: true,
 		}
@@ -68,6 +76,7 @@ impl Default for HttpConfiguration {
 pub struct IpcConfiguration {
 	pub enabled: bool,
 	pub socket_addr: String,
+	pub chmod: String,
 	pub apis: ApiSet,
 }
 
@@ -81,6 +90,7 @@ impl Default for IpcConfiguration {
 				let data_dir = ::dir::default_data_path();
 				parity_ipc_path(&data_dir, "$BASE/jsonrpc.ipc", 0)
 			},
+			chmod: "660".into(),
 			apis: ApiSet::IpcContext,
 		}
 	}
@@ -111,7 +121,7 @@ impl Default for WsConfiguration {
 			origins: Some(vec!["parity://*".into(),"chrome-extension://*".into(), "moz-extension://*".into()]),
 			hosts: Some(Vec::new()),
 			signer_path: replace_home(&data_dir, "$BASE/signer").into(),
-			support_token_api: true,
+			support_token_api: false,
 		}
 	}
 }
@@ -253,7 +263,16 @@ pub fn new_ipc<D: rpc_apis::Dependencies>(
 		}
 	}
 
-	match rpc::start_ipc(&conf.socket_addr, handler, rpc::RpcExtractor) {
+	// some validations ..
+	let chmod = conf.chmod;
+	let chmod = u16::from_str_radix(&chmod, 8)
+		.map_err(|e| format!("Invalid octal value: {}", e))?;
+
+	if chmod == 0 || chmod > 0o7777 {
+		return Err("Valid octal permissions are within the range 1 to 7777".into())
+	}
+
+	match rpc::start_ipc(&conf.socket_addr, handler, rpc::RpcExtractor, chmod) {
 		Ok(server) => Ok(Some(server)),
 		Err(io_error) => Err(format!("IPC error: {}", io_error)),
 	}

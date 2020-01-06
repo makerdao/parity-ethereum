@@ -258,10 +258,10 @@ impl fmt::Display for SpecHardcodedSync {
 }
 
 fn convert_json_to_spec(
-	pair: (ethjson::hash::Address, ethjson::spec::Builtin),
+	(address, builtin): (ethjson::hash::Address, ethjson::spec::builtin::Builtin),
 ) -> Result<(Address, Builtin), Error> {
-	let builtin = Builtin::try_from(pair.1)?;
-	Ok((pair.0.into(), builtin))
+	let builtin = Builtin::try_from(builtin)?;
+	Ok((address.into(), builtin))
 }
 
 /// Load from JSON object.
@@ -510,9 +510,9 @@ impl Spec {
 
 		let factories = Default::default();
 		let mut db = journaldb::new(
-			Arc::new(kvdb_memorydb::create(0)),
+			Arc::new(kvdb_memorydb::create(1)),
 			journaldb::Algorithm::Archive,
-			None,
+			0,
 		);
 
 		self.ensure_db_good(BasicBackend(db.as_hash_db_mut()), &factories)
@@ -540,18 +540,14 @@ impl Spec {
 				data: d,
 			}.fake_sign(from);
 
-			let res = executive_state::prove_transaction_virtual(
+			executive_state::prove_transaction_virtual(
 				db.as_hash_db_mut(),
 				*genesis.state_root(),
 				&tx,
 				self.engine.machine(),
 				&env_info,
 				factories.clone(),
-			);
-
-			res.map(|(out, proof)| {
-				(out, proof.into_iter().map(|x| x.into_vec()).collect())
-			}).ok_or_else(|| "Failed to prove call: insufficient state".into())
+			).ok_or_else(|| "Failed to prove call: insufficient state".into())
 		};
 
 		self.engine.genesis_epoch_data(&genesis, &call)

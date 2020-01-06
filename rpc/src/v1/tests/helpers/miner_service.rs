@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use bytes::Bytes;
-use client_traits::{Nonce, StateClient};
+use client_traits::{Nonce, StateClient, ForceUpdateSealing};
 use engine::{Engine, signer::EngineSigner};
 use ethcore::block::SealedBlock;
 use ethcore::client::{PrepareOpenBlock, EngineInfo};
@@ -192,7 +192,7 @@ impl MinerService for TestMinerService {
 	}
 
 	/// New chain head event. Restart mining operation.
-	fn update_sealing<C>(&self, _chain: &C) {
+	fn update_sealing<C>(&self, _chain: &C, _force: ForceUpdateSealing) {
 		unimplemented!();
 	}
 
@@ -229,8 +229,23 @@ impl MinerService for TestMinerService {
 		self.queued_transactions()
 	}
 
-	fn ready_transactions_filtered<C>(&self, _chain: &C, _max_len: usize, _filter: Option<FilterOptions>, _ordering: miner::PendingOrdering) -> Vec<Arc<VerifiedTransaction>> {
+	fn ready_transactions_filtered<C>(
+		&self,
+		_chain: &C,
+		max_len: usize,
+		filter: Option<FilterOptions>,
+		_ordering: miner::PendingOrdering
+	) -> Vec<Arc<VerifiedTransaction>> {
 		self.queued_transactions()
+			.iter()
+			.cloned()
+			.filter(|tx| {
+				filter.as_ref().map_or(true, |filter| {
+					filter.matches(tx.signed())
+				})
+			})
+			.take(max_len)
+			.collect()
 	}
 
 	fn pending_transaction_hashes<C>(&self, _chain: &C) -> BTreeSet<H256> {

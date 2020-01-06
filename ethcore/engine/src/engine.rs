@@ -32,7 +32,7 @@ use common_types::{
 	},
 	errors::{EthcoreError as Error, EngineError},
 	snapshot::Snapshotting,
-	transaction::{self, UnverifiedTransaction},
+	transaction::{self, SignedTransaction, UnverifiedTransaction},
 };
 use client_traits::EngineClient;
 
@@ -185,8 +185,24 @@ pub trait Engine: Sync + Send {
 	/// Allow mutating the header during seal generation. Currently only used by Clique.
 	fn on_seal_block(&self, _block: &mut ExecutedBlock) -> Result<(), Error> { Ok(()) }
 
+	/// Returns a list of transactions for a new block if we are the author.
+	///
+	/// This is called when the miner prepares a new block that this node will author and seal. It returns a list of
+	/// transactions that will be added to the block before any other transactions from the queue.
+	fn generate_engine_transactions(&self, _block: &ExecutedBlock) -> Result<Vec<SignedTransaction>, Error> {
+		Ok(Vec::new())
+	}
+
 	/// Returns the engine's current sealing state.
 	fn sealing_state(&self) -> SealingState { SealingState::External }
+
+	/// Called in `miner.chain_new_blocks` if the engine wishes to `update_sealing`
+	/// after a block was recently sealed.
+	///
+	/// returns false by default
+	fn should_reseal_on_update(&self) -> bool {
+		false
+	}
 
 	/// Attempt to seal the block internally.
 	///

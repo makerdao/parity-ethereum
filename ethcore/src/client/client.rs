@@ -78,7 +78,9 @@ use client_traits::{
 	StateClient,
 	StateOrBlock,
 	Tick,
-	TransactionInfo
+	TransactionInfo,
+	TransactionRequest,
+	ForceUpdateSealing
 };
 use db::{keys::BlockDetails, Readable, Writable};
 use engine::Engine;
@@ -133,8 +135,7 @@ use types::{
 	verification::{Unverified, VerificationQueueInfo as BlockQueueInfo},
 };
 use types::data_format::DataFormat;
-use verification::{BlockQueue, Verifier};
-use verification;
+use verification::{self, BlockQueue};
 use verification::queue::kind::BlockLike;
 use vm::{CreateContractAddress, EnvInfo, LastHashes};
 
@@ -161,9 +162,6 @@ impl SleepState {
 struct Importer {
 	/// Lock used during block import
 	pub import_lock: Mutex<()>, // FIXME Maybe wrap the whole `Importer` instead?
-
-	/// Used to verify blocks
-	pub verifier: Box<dyn Verifier<Client>>,
 
 	/// Queue containing pending blocks
 	pub block_queue: BlockQueue<Client>,
@@ -274,7 +272,6 @@ impl Importer {
 
 		Ok(Importer {
 			import_lock: Mutex::new(()),
-			verifier: verification::new(config.verifier_type.clone()),
 			block_queue,
 			miner,
 			ancient_verifier: AncientVerifier::new(engine.clone()),
@@ -392,15 +389,15 @@ impl Importer {
 
 		let chain = client.chain.read();
 		// Verify Block Family
-		let verify_family_result = self.verifier.verify_block_family(
+		let verify_family_result = verification::verify_block_family(
 			&header,
 			&parent,
 			engine,
-			Some(verification::FullFamilyParams {
+			verification::FullFamilyParams {
 				block: &block,
 				block_provider: &**chain,
 				client
-			}),
+			},
 		);
 
 		if let Err(e) = verify_family_result {
@@ -408,7 +405,7 @@ impl Importer {
 			return Err(e);
 		};
 
-		let verify_external_result = self.verifier.verify_block_external(&header, engine);
+		let verify_external_result = engine.verify_block_external(&header);
 		if let Err(e) = verify_external_result {
 			warn!(target: "client", "Stage 4 block verification failed for #{} ({})\nError: {:?}", header.number(), header.hash(), e);
 			return Err(e.into());
@@ -450,7 +447,7 @@ impl Importer {
 		}
 
 		// Final Verification
-		if let Err(e) = self.verifier.verify_block_final(&header, &locked_block.header) {
+		if let Err(e) = verification::verify_block_final(&header, &locked_block.header) {
 			warn!(target: "client", "Stage 5 block verification failed for #{} ({})\nError: {:?}", header.number(), header.hash(), e);
 			return Err(e.into());
 		}
@@ -655,15 +652,13 @@ impl Importer {
 							let res = Executive::new(&mut state, &env_info, &machine, &schedule)
 								.transact(&transaction, options);
 
-							let res = match res {
+							match res {
 								Err(e) => {
 									trace!(target: "client", "Proved call failed: {}", e);
 									Err(e.to_string())
 								}
 								Ok(res) => Ok((res.output, state.drop().1.extract_proof())),
-							};
-
-							res.map(|(output, proof)| (output, proof.into_iter().map(|x| x.into_vec()).collect()))
+							}
 						};
 
 						match with_state.generate_proof(&call) {
@@ -734,7 +729,7 @@ impl Client {
 
 		let trie_factory = TrieFactory::new(trie_spec, Layout);
 		let factories = Factories {
-			vm: VmFactory::new(config.vm_type.clone(), config.jump_table_size),
+			vm: VmFactory::new(config.jump_table_size),
 			trie: trie_factory,
 			accountdb: Default::default(),
 		};
@@ -811,13 +806,6 @@ impl Client {
 			importer,
 			config,
 		});
-
-		// prune old states.
-		{
-			let state_db = client.state_db.read().boxed_clone();
-			let chain = client.chain.read();
-			client.prune_ancient(state_db, &chain)?;
-		}
 
 		// ensure genesis epoch proof in the DB.
 		{
@@ -1219,7 +1207,7 @@ impl Client {
 			gas: U256::from(50_000_000),
 			gas_price: U256::default(),
 			value: U256::default(),
-			data: data,
+			data,
 		}.fake_sign(from)
 	}
 
@@ -1316,9 +1304,9 @@ impl DatabaseRestore for Client {
 impl BlockChainReset for Client {
 	fn reset(&self, num: u32) -> Result<(), String> {
 		if num as u64 > self.pruning_history() {
-			return Err("Attempting to reset to block with pruned state".into())
+			return Err(format!("Attempting to reset the chain {} blocks back failed: state is pruned (max available: {})", num, self.pruning_history()).into())
 		} else if num == 0 {
-			return Err("invalid number of blocks to reset".into())
+			return Err("0 is an invalid number of blocks to reset".into())
 		}
 
 		let mut blocks_to_delete = Vec::with_capacity(num as usize);
@@ -2173,29 +2161,35 @@ impl BlockChainClient for Client {
 		}
 	}
 
-	fn transact_contract(&self, address: Address, data: Bytes) -> Result<(), transaction::Error> {
+	fn create_transaction(&self, TransactionRequest { action, data, gas, gas_price, nonce }: TransactionRequest)
+		-> Result<SignedTransaction, transaction::Error>
+	{
 		let authoring_params = self.importer.miner.authoring_params();
 		let service_transaction_checker = self.importer.miner.service_transaction_checker();
 		let gas_price = if let Some(checker) = service_transaction_checker {
 			match checker.check_address(self, authoring_params.author) {
 				Ok(true) => U256::zero(),
-				_ => self.importer.miner.sensible_gas_price(),
+				_ => gas_price.unwrap_or_else(|| self.importer.miner.sensible_gas_price()),
 			}
 		} else {
 			self.importer.miner.sensible_gas_price()
 		};
 		let transaction = transaction::Transaction {
-			nonce: self.latest_nonce(&authoring_params.author),
-			action: Action::Call(address),
-			gas: self.importer.miner.sensible_gas_limit(),
+			nonce: nonce.unwrap_or_else(|| self.latest_nonce(&authoring_params.author)),
+			action,
+			gas: gas.unwrap_or_else(|| self.importer.miner.sensible_gas_limit()),
 			gas_price,
 			value: U256::zero(),
-			data: data,
+			data,
 		};
 		let chain_id = self.engine.signing_chain_id(&self.latest_env_info());
 		let signature = self.engine.sign(transaction.hash(chain_id))
 			.map_err(|e| transaction::Error::InvalidSignature(e.to_string()))?;
-		let signed = SignedTransaction::new(transaction.with_signature(signature, chain_id))?;
+		Ok(SignedTransaction::new(transaction.with_signature(signature, chain_id))?)
+	}
+
+	fn transact(&self, tx_request: TransactionRequest) -> Result<(), transaction::Error> {
+		let signed = self.create_transaction(tx_request)?;
 		self.importer.miner.import_own_transaction(self, signed.into())
 	}
 }
@@ -2393,7 +2387,9 @@ impl ImportSealedBlock for Client {
 		let raw = block.rlp_bytes();
 		let header = block.header.clone();
 		let hash = header.hash();
-		self.notify(|n| n.block_pre_import(&raw, &hash, header.difficulty()));
+		self.notify(|n| {
+			n.block_pre_import(&raw, &hash, header.difficulty())
+		});
 
 		let route = {
 			// Do a super duper basic verification to detect potential bugs
@@ -2481,19 +2477,22 @@ impl ::miner::TransactionVerifierClient for Client {}
 impl ::miner::BlockChainClient for Client {}
 
 impl client_traits::EngineClient for Client {
-	fn update_sealing(&self) {
-		self.importer.miner.update_sealing(self)
+	fn update_sealing(&self, force: ForceUpdateSealing) {
+		self.importer.miner.update_sealing(self, force)
 	}
 
 	fn submit_seal(&self, block_hash: H256, seal: Vec<Bytes>) {
-		let import = self.importer.miner.submit_seal(block_hash, seal).and_then(|block| self.import_sealed_block(block));
+		let import = self.importer.miner.submit_seal(block_hash, seal)
+			.and_then(|block| self.import_sealed_block(block));
 		if let Err(err) = import {
 			warn!(target: "poa", "Wrong internal seal submission! {:?}", err);
 		}
 	}
 
 	fn broadcast_consensus_message(&self, message: Bytes) {
-		self.notify(|notify| notify.broadcast(ChainMessageType::Consensus(message.clone())));
+		self.notify(|notify| {
+			notify.broadcast(ChainMessageType::Consensus(message.clone()))
+		});
 	}
 
 	fn epoch_transition_for(&self, parent_hash: H256) -> Option<EpochTransition> {
@@ -2632,13 +2631,21 @@ impl ImportExportBlocks for Client {
 			if i % 10000 == 0 {
 				info!("#{}", i);
 			}
-			let b = self.block(BlockId::Number(i)).ok_or("Error exporting incomplete chain")?.into_inner();
+			let b = self.block(BlockId::Number(i))
+				.ok_or("Error exporting incomplete chain")?
+				.into_inner();
 			match format {
 				DataFormat::Binary => {
-					out.write(&b).map_err(|e| format!("Couldn't write to stream. Cause: {}", e))?;
+					out.write(&b)
+						.map_err(|e| {
+							format!("Couldn't write to stream. Cause: {}", e)
+						})?;
 				}
 				DataFormat::Hex => {
-					out.write_fmt(format_args!("{}\n", b.pretty())).map_err(|e| format!("Couldn't write to stream. Cause: {}", e))?;
+					out.write_fmt(format_args!("{}\n", b.pretty()))
+						.map_err(|e| {
+							format!("Couldn't write to stream. Cause: {}", e)
+						})?;
 				}
 			}
 		}
@@ -2658,7 +2665,10 @@ impl ImportExportBlocks for Client {
 		let format = match format {
 			Some(format) => format,
 			None => {
-				first_read = source.read(&mut first_bytes).map_err(|_| "Error reading from the file/stream.")?;
+				first_read = source.read(&mut first_bytes)
+					.map_err(|_| {
+						"Error reading from the file/stream."
+					})?;
 				match first_bytes[0] {
 					0xf9 => DataFormat::Binary,
 					_ => DataFormat::Hex,
@@ -2669,7 +2679,9 @@ impl ImportExportBlocks for Client {
 		let do_import = |bytes: Vec<u8>| {
 			let block = Unverified::from_rlp(bytes).map_err(|_| "Invalid block rlp")?;
 			let number = block.header.number();
-			while self.queue_info().is_full() { std::thread::sleep(Duration::from_secs(1)); }
+			while self.queue_info().is_full() {
+				std::thread::sleep(Duration::from_secs(1));
+			}
 			match self.import_block(block) {
 				Err(EthcoreError::Import(ImportError::AlreadyInChain)) => {
 					trace!("Skipping block #{}: already in chain.", number);
@@ -2690,33 +2702,45 @@ impl ImportExportBlocks for Client {
 					} else {
 						let mut bytes = vec![0; READAHEAD_BYTES];
 						let n = source.read(&mut bytes)
-							.map_err(|err| format!("Error reading from the file/stream: {:?}", err))?;
+							.map_err(|err| {
+								format!("Error reading from the file/stream: {:?}", err)
+							})?;
 						(bytes, n)
 					};
 					if n == 0 { break; }
 					first_read = 0;
 					let s = PayloadInfo::from(&bytes)
-						.map_err(|e| format!("Invalid RLP in the file/stream: {:?}", e))?.total();
+						.map_err(|e| {
+							format!("Invalid RLP in the file/stream: {:?}", e)
+						})?.total();
 					bytes.resize(s, 0);
 					source.read_exact(&mut bytes[n..])
-						.map_err(|err| format!("Error reading from the file/stream: {:?}", err))?;
+						.map_err(|err| {
+							format!("Error reading from the file/stream: {:?}", err)
+						})?;
 					do_import(bytes)?;
 				}
 			}
 			DataFormat::Hex => {
 				for line in BufReader::new(source).lines() {
 					let s = line
-						.map_err(|err| format!("Error reading from the file/stream: {:?}", err))?;
+						.map_err(|err| {
+							format!("Error reading from the file/stream: {:?}", err)
+						})?;
 					let s = if first_read > 0 {
 						from_utf8(&first_bytes)
-							.map_err(|err| format!("Invalid UTF-8: {:?}", err))?
+							.map_err(|err| {
+								format!("Invalid UTF-8: {:?}", err)
+							})?
 							.to_owned() + &(s[..])
 					} else {
 						s
 					};
 					first_read = 0;
 					let bytes = s.from_hex()
-						.map_err(|err| format!("Invalid hex in file/stream: {:?}", err))?;
+						.map_err(|err| {
+							format!("Invalid hex in file/stream: {:?}", err)
+						})?;
 					do_import(bytes)?;
 				}
 			}
@@ -2969,7 +2993,7 @@ mod tests {
 
 	#[test]
 	fn should_mark_finalization_correctly_for_parent() {
-		let client = generate_dummy_client_with_spec_and_data(spec::new_test_with_finality, 2, 0, &[]);
+		let client = generate_dummy_client_with_spec_and_data(spec::new_test_with_finality, 2, 0, &[], false);
 		let chain = client.chain();
 
 		let block1_details = chain.block_hash(1).and_then(|h| chain.block_details(&h));

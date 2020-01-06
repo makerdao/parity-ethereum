@@ -6,6 +6,10 @@ authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2018"
 license = "GPL-3.0"
 
+[[bench]]
+name = "to_fat_rlps"
+harness = false
+
 [dependencies]
 account-db = { path = "../account-db" }
 account-state = { path = "../account-state" }
@@ -25,7 +29,7 @@ itertools = "0.5"
 journaldb = { path = "../../util/journaldb" }
 keccak-hash = "0.4.0"
 keccak-hasher = { path = "../../util/keccak-hasher" }
-kvdb = "0.1"
+kvdb = "0.2"
 log = "0.4.8"
 num_cpus = "1.10.1"
 rand = "0.7"
@@ -36,11 +40,12 @@ rlp_derive = { path = "../../util/rlp-derive" }
 scopeguard = "1.0.0"
 snappy = { package = "parity-snappy", version ="0.1.0" }
 state-db = { path = "../state-db" }
-trie-db = "0.15.0"
+trie-db = "0.18.0"
 triehash = { package = "triehash-ethereum", version = "0.2",  path = "../../util/triehash-ethereum" }
 
 [dev-dependencies]
 accounts = { package = "ethcore-accounts", path = "../../accounts" }
+criterion = "0.3.0"
 engine = { path = "../engine", features = ["test-helpers"] }
 env_logger = "0.5"
 ethabi = "9.0.1"
@@ -48,7 +53,7 @@ ethabi-contract = "9.0.0"
 ethabi-derive = "9.0.1"
 ethcore = { path = "..", features = ["test-helpers"] }
 ethkey = { path = "../../accounts/ethkey" }
-kvdb-rocksdb = { version = "0.1.5" }
+kvdb-rocksdb = "0.3.0"
 lazy_static = { version = "1.3" }
 spec = { path = "../spec" }
 tempdir = "0.3"

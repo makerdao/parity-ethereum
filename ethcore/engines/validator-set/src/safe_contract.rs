@@ -154,11 +154,10 @@ fn check_first_proof(machine: &Machine, contract_address: Address, old_header: H
 
 fn decode_first_proof(rlp: &Rlp) -> Result<(Header, Vec<DBValue>), EthcoreError> {
 	let header = rlp.val_at(0)?;
-	let state_items = rlp.at(1)?.iter().map(|x| {
-		let mut val = DBValue::new();
-		val.append_slice(x.data()?);
-		Ok(val)
-	}).collect::<Result<_, EthcoreError>>()?;
+	let state_items = rlp.at(1)?
+		.iter()
+		.map(|x| Ok(x.data()?.to_vec()) )
+		.collect::<Result<_, EthcoreError>>()?;
 
 	Ok((header, state_items))
 }
@@ -464,11 +463,11 @@ mod tests {
 		transaction::{Transaction, Action},
 		verification::Unverified,
 	};
-	use client_traits::{BlockInfo, ChainInfo, ImportBlock, EngineClient};
+	use client_traits::{BlockInfo, ChainInfo, ImportBlock, EngineClient, ForceUpdateSealing};
 	use engine::{EpochChange, Proof};
 	use ethcore::{
 		miner::{self, MinerService},
-		test_helpers::{generate_dummy_client_with_spec, generate_dummy_client_with_spec_and_data}
+		test_helpers::generate_dummy_client_with_spec
 	};
 	use parity_crypto::publickey::Secret;
 	use ethereum_types::Address;
@@ -513,7 +512,7 @@ mod tests {
 			data: "bfc708a000000000000000000000000082a978b3f5962a5b0957d9ee9eef472ee55b42f1".from_hex().unwrap(),
 		}.sign(&s0, Some(chain_id));
 		client.miner().import_own_transaction(client.as_ref(), tx.into()).unwrap();
-		EngineClient::update_sealing(&*client);
+		EngineClient::update_sealing(&*client, ForceUpdateSealing::No);
 		assert_eq!(client.chain_info().best_block_number, 1);
 		// Add "1" validator back in.
 		let tx = Transaction {
@@ -525,14 +524,14 @@ mod tests {
 			data: "4d238c8e00000000000000000000000082a978b3f5962a5b0957d9ee9eef472ee55b42f1".from_hex().unwrap(),
 		}.sign(&s0, Some(chain_id));
 		client.miner().import_own_transaction(client.as_ref(), tx.into()).unwrap();
-		EngineClient::update_sealing(&*client);
+		EngineClient::update_sealing(&*client, ForceUpdateSealing::No);
 		// The transaction is not yet included so still unable to seal.
 		assert_eq!(client.chain_info().best_block_number, 1);
 
 		// Switch to the validator that is still there.
 		let signer = Box::new((tap.clone(), v0, "".into()));
 		client.miner().set_author(miner::Author::Sealer(signer));
-		EngineClient::update_sealing(&*client);
+		EngineClient::update_sealing(&*client, ForceUpdateSealing::No);
 		assert_eq!(client.chain_info().best_block_number, 2);
 		// Switch back to the added validator, since the state is updated.
 		let signer = Box::new((tap.clone(), v1, "".into()));
@@ -546,12 +545,12 @@ mod tests {
 			data: Vec::new(),
 		}.sign(&s0, Some(chain_id));
 		client.miner().import_own_transaction(client.as_ref(), tx.into()).unwrap();
-		EngineClient::update_sealing(&*client);
+		EngineClient::update_sealing(&*client, ForceUpdateSealing::No);
 		// Able to seal again.
 		assert_eq!(client.chain_info().best_block_number, 3);
 
 		// Check syncing.
-		let sync_client = generate_dummy_client_with_spec_and_data(spec::new_validator_safe_contract, 0, 0, &[]);
+		let sync_client = generate_dummy_client_with_spec(spec::new_validator_safe_contract);
 		sync_client.engine().register_client(Arc::downgrade(&sync_client) as _);
 		for i in 1..4 {
 			sync_client.import_block(Unverified::from_rlp(client.block(BlockId::Number(i)).unwrap().into_inner()).unwrap()).unwrap();

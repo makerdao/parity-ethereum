@@ -28,7 +28,7 @@ use bytes::ToPretty;
 use rlp::PayloadInfo;
 use client_traits::{BlockChainReset, Nonce, Balance, BlockChainClient, ImportExportBlocks};
 use ethcore::{
-	client::{DatabaseCompactionProfile, VMType},
+	client::{DatabaseCompactionProfile},
 	miner::Miner,
 };
 use ethcore_service::ClientService;
@@ -95,7 +95,6 @@ pub struct ImportBlockchain {
 	pub compaction: DatabaseCompactionProfile,
 	pub tracing: Switch,
 	pub fat_db: Switch,
-	pub vm_type: VMType,
 	pub check_seal: bool,
 	pub with_color: bool,
 	pub verifier_settings: VerifierSettings,
@@ -211,9 +210,11 @@ fn execute_import_light(cmd: ImportBlockchain) -> Result<(), String> {
 	config.queue.verifier_settings = cmd.verifier_settings;
 
 	// initialize database.
-	let db = db::open_db(&client_path.to_str().expect("DB path could not be converted to string."),
-						 &cmd.cache_config,
-						 &cmd.compaction).map_err(|e| format!("Failed to open database: {:?}", e))?;
+	let db = db::open_db_light(
+		&client_path.to_str().expect("DB path could not be converted to string."),
+		&cmd.cache_config,
+		&cmd.compaction,
+	).map_err(|e| format!("Failed to open database: {:?}", e))?;
 
 	// TODO: could epoch signals be available at the end of the file?
 	let fetch = ::light::client::fetch::unavailable();
@@ -359,7 +360,6 @@ fn execute_import(cmd: ImportBlockchain) -> Result<(), String> {
 		tracing,
 		fat_db,
 		cmd.compaction,
-		cmd.vm_type,
 		"".into(),
 		algorithm,
 		cmd.pruning_history,
@@ -498,7 +498,6 @@ fn start_client(
 		tracing,
 		fat_db,
 		compaction,
-		VMType::default(),
 		"".into(),
 		algorithm,
 		pruning_history,

@@ -309,7 +309,7 @@ impl BlockDownloader {
 				}
 			}
 		}
-
+		// Update the highest block number seen on the network from the header.
 		if let Some((number, _)) = last_header {
 			if self.highest_block.as_ref().map_or(true, |n| number > *n) {
 				self.highest_block = Some(number);
@@ -571,6 +571,8 @@ impl BlockDownloader {
 				},
 				Err(EthcoreError::Import(ImportError::AlreadyQueued)) => {
 					trace_sync!(self, "Block already queued {:?}", h);
+					// Treat blocks in queue as imported in order not to start retraction too early
+					imported.insert(h.clone());
 					self.block_imported(&h, number, &parent);
 				},
 				Ok(_) => {

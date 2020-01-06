@@ -174,6 +174,15 @@ impl Ord for SessionCapabilityInfo {
 	}
 }
 
+/// Type of NAT resolving method
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum NatType {
+	Nothing,
+	Any,
+	UPnP,
+	NatPMP,
+}
+
 /// Network service configuration
 #[derive(Debug, PartialEq, Clone)]
 pub struct NetworkConfiguration {
@@ -189,6 +198,8 @@ pub struct NetworkConfiguration {
 	pub udp_port: Option<u16>,
 	/// Enable NAT configuration
 	pub nat_enabled: bool,
+	/// Nat type
+	pub nat_type: NatType,
 	/// Enable discovery
 	pub discovery_enabled: bool,
 	/// List of initial node addresses
@@ -229,6 +240,7 @@ impl NetworkConfiguration {
 			public_address: None,
 			udp_port: None,
 			nat_enabled: true,
+			nat_type: NatType::Any,
 			discovery_enabled: true,
 			boot_nodes: Vec::new(),
 			use_secret: None,
@@ -393,42 +405,42 @@ impl NonReservedPeerMode {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IpFilter {
-    pub predefined: AllowIP,
-    pub custom_allow: Vec<IpNetwork>,
-    pub custom_block: Vec<IpNetwork>,
+	pub predefined: AllowIP,
+	pub custom_allow: Vec<IpNetwork>,
+	pub custom_block: Vec<IpNetwork>,
 }
 
 impl Default for IpFilter {
-    fn default() -> Self {
-        IpFilter {
-            predefined: AllowIP::All,
-            custom_allow: vec![],
-            custom_block: vec![],
-        }
-    }
+	fn default() -> Self {
+		IpFilter {
+			predefined: AllowIP::All,
+			custom_allow: vec![],
+			custom_block: vec![],
+		}
+	}
 }
 
 impl IpFilter {
-    /// Attempt to parse the peer mode from a string.
-    pub fn parse(s: &str) -> Result<IpFilter, IpNetworkError> {
-        let mut filter = IpFilter::default();
-        for f in s.split_whitespace() {
-            match f {
-                "all" => filter.predefined = AllowIP::All,
-                "private" => filter.predefined = AllowIP::Private,
-                "public" => filter.predefined = AllowIP::Public,
-                "none" => filter.predefined = AllowIP::None,
-                custom => {
-                    if custom.starts_with("-") {
-                        filter.custom_block.push(IpNetwork::from_str(&custom.to_owned().split_off(1))?)
-                    } else {
-                        filter.custom_allow.push(IpNetwork::from_str(custom)?)
-                    }
-                }
-            }
-        }
-        Ok(filter)
-    }
+	/// Attempt to parse the peer mode from a string.
+	pub fn parse(s: &str) -> Result<IpFilter, IpNetworkError> {
+		let mut filter = IpFilter::default();
+		for f in s.split_whitespace() {
+			match f {
+				"all" => filter.predefined = AllowIP::All,
+				"private" => filter.predefined = AllowIP::Private,
+				"public" => filter.predefined = AllowIP::Public,
+				"none" => filter.predefined = AllowIP::None,
+				custom => {
+					if custom.starts_with("-") {
+						filter.custom_block.push(IpNetwork::from_str(&custom.to_owned().split_off(1))?)
+					} else {
+						filter.custom_allow.push(IpNetwork::from_str(custom)?)
+					}
+				}
+			}
+		}
+		Ok(filter)
+	}
 }
 
 /// IP fiter
@@ -440,6 +452,6 @@ pub enum AllowIP {
 	Private,
 	/// Connect to public network only
 	Public,
-    /// Block all addresses
-    None,
+	/// Block all addresses
+	None,
 }
