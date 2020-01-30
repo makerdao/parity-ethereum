@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// Copyright 2015-2020 Parity Technologies (UK) Ltd.
 // This file is part of Parity Ethereum.
 
 // Parity Ethereum is free software: you can redistribute it and/or modify
@@ -97,22 +97,31 @@ pub struct AuthorityRoundParams {
 	pub two_thirds_majority_transition: Option<Uint>,
 	/// The random number contract's address, or a map of contract transitions.
 	pub randomness_contract_address: Option<BTreeMap<Uint, Address>>,
+	/// The addresses of contracts that determine the block gas limit starting from the block number
+	/// associated with each of those contracts.
+	pub block_gas_limit_contract_transitions: Option<BTreeMap<Uint, Address>>,
+	/// The block number at which the consensus engine switches from AuRa to AuRa with POSDAO
+	/// modifications.
+	pub posdao_transition: Option<Uint>,
 }
 
 /// Authority engine deserialization.
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AuthorityRound {
-	/// Ethash params.
+	/// Authority Round parameters.
 	pub params: AuthorityRoundParams,
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{Address, Uint, StepDuration};
-	use ethereum_types::{U256, H160};
-	use crate::spec::{validator_set::ValidatorSet, authority_round::AuthorityRound};
 	use std::str::FromStr;
+
+	use ethereum_types::{U256, H160};
+	use serde_json;
+
+	use super::{Address, Uint, StepDuration};
+	use crate::{spec::{validator_set::ValidatorSet, authority_round::AuthorityRound}};
 
 	#[test]
 	fn authority_round_deserialization() {
@@ -130,6 +139,10 @@ mod tests {
 				"randomnessContractAddress": {
 					"10": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 					"20": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+				},
+				"blockGasLimitContractTransitions": {
+					"10": "0x1000000000000000000000000000000000000001",
+					"20": "0x2000000000000000000000000000000000000002"
 				}
 			}
 		}"#;
@@ -149,5 +162,10 @@ mod tests {
 				(Uint(10.into()), Address(H160::from_str("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").unwrap())),
 				(Uint(20.into()), Address(H160::from_str("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").unwrap())),
 			].into_iter().collect());
+		let expected_bglc =
+			[(Uint(10.into()), Address(H160::from_str("1000000000000000000000000000000000000001").unwrap())),
+			 (Uint(20.into()), Address(H160::from_str("2000000000000000000000000000000000000002").unwrap()))];
+		assert_eq!(deserialized.params.block_gas_limit_contract_transitions,
+				   Some(expected_bglc.to_vec().into_iter().collect()));
 	}
 }

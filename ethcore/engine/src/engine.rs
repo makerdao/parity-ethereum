@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// Copyright 2015-2020 Parity Technologies (UK) Ltd.
 // This file is part of Parity Ethereum.
 
 // Parity Ethereum is free software: you can redistribute it and/or modify
@@ -347,6 +347,12 @@ pub trait Engine: Sync + Send {
 		Ok(*header.author())
 	}
 
+	/// Overrides the block gas limit. Whenever this returns `Some` for a header, the next block's gas limit must be
+	/// exactly that value.
+	fn gas_limit_override(&self, _header: &Header) -> Option<U256> {
+		None
+	}
+
 	/// Get the general parameters of the chain.
 	fn params(&self) -> &CommonParams;
 
@@ -396,6 +402,11 @@ pub trait Engine: Sync + Send {
 	/// Performs pre-validation of RLP decoded transaction before other processing
 	fn decode_transaction(&self, transaction: &[u8]) -> Result<UnverifiedTransaction, transaction::Error> {
 		self.machine().decode_transaction(transaction)
+	}
+
+	/// The configured minimum gas limit.
+	fn min_gas_limit(&self) -> U256 {
+		self.params().min_gas_limit
 	}
 }
 

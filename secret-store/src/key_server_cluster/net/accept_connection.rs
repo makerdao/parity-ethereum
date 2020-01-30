@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// Copyright 2015-2020 Parity Technologies (UK) Ltd.
 // This file is part of Parity Ethereum.
 
 // Parity Ethereum is free software: you can redistribute it and/or modify
@@ -20,12 +20,13 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use futures::{Future, Poll};
 use tokio::net::TcpStream;
-use key_server_cluster::{Error, NodeKeyPair};
+use blockchain::SigningKeyPair;
+use key_server_cluster::Error;
 use key_server_cluster::io::{accept_handshake, Handshake, Deadline, deadline};
 use key_server_cluster::net::Connection;
 
 /// Create future for accepting incoming connection.
-pub fn accept_connection(stream: TcpStream, self_key_pair: Arc<dyn NodeKeyPair>) -> Deadline<AcceptConnection> {
+pub fn accept_connection(stream: TcpStream, self_key_pair: Arc<dyn SigningKeyPair>) -> Deadline<AcceptConnection> {
 	// TODO: This could fail so it would be better either to accept the
 	// address as a separate argument or return a result.
 	let address = stream.peer_addr().expect("Unable to determine tcp peer address");

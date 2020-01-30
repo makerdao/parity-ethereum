@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// Copyright 2015-2020 Parity Technologies (UK) Ltd.
 // This file is part of Parity Ethereum.
 
 // Parity Ethereum is free software: you can redistribute it and/or modify
@@ -889,7 +889,8 @@ impl SessionTransport for IsolatedSessionTransport {
 pub mod tests {
 	use std::collections::BTreeSet;
 	use crypto::publickey::{Random, Generator, Public};
-	use key_server_cluster::{NodeId, Error, KeyStorage, NodeKeyPair};
+	use blockchain::SigningKeyPair;
+	use key_server_cluster::{NodeId, Error, KeyStorage};
 	use key_server_cluster::cluster::tests::MessageLoop as ClusterMessageLoop;
 	use key_server_cluster::servers_set_change_session::tests::{MessageLoop, AdminSessionAdapter, generate_key};
 	use key_server_cluster::admin_sessions::ShareChangeSessionMeta;

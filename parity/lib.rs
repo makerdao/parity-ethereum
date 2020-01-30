@@ -1,4 +1,4 @@
-// Copyright 2015-2019 Parity Technologies (UK) Ltd.
+// Copyright 2015-2020 Parity Technologies (UK) Ltd.
 // This file is part of Parity Ethereum.
 
 // Parity Ethereum is free software: you can redistribute it and/or modify
@@ -86,6 +86,12 @@ extern crate ethcore_accounts as accounts;
 
 #[cfg(feature = "secretstore")]
 extern crate ethcore_secretstore;
+
+#[cfg(feature = "secretstore")]
+extern crate ethabi;
+
+#[cfg(feature = "secretstore")]
+extern crate ethcore_call_contract as call_contract;
 
 #[cfg(test)]
 #[macro_use]
